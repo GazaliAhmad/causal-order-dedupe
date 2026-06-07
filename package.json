@@ -1,6 +1,6 @@
 {
   "name": "@causal-order/dedupe",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Deduplication support for causal-order event streams.",
   "license": "MIT",
   "repository": {

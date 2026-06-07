@@ -2,6 +2,8 @@
 
 Deduplication support for `causal-order` event streams.
 
+Version `1.0.2`.
+
 Runtime compatibility:
 
 - Node `20+`
@@ -45,13 +47,15 @@ dedupe.cleanup();
 
 ## API
 
-### `new DedupeGateway(config?)`
+### `new DedupeGateway(options)`
 
-Supported options:
+Creates a dedupe gateway. The `options` object is optional.
+
+Options:
 
 - `slidingWindowSeconds`: initial lookback window, default `180`
 - `maxSlidingWindowSeconds`: hard upper bound for dynamic window growth, default `300`
-- `nowProvider` or `now_provider`: function returning the current time in milliseconds, compatible with `BigInt`
+- `nowProvider` or `now_provider`: function that returns the current time in milliseconds, compatible with `BigInt`
 
 ### `filter(event)`
 

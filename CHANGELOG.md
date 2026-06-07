@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-06-07
+
+### Changed
+
+- Cleaned the published `README.md` so it stays focused on package consumers instead of repository-only workflow details.
+
 ## [1.0.1] - 2026-06-07
 
 ### Fixed

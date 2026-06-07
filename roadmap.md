@@ -13,11 +13,15 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## v1.0.2
 
+- Clean the published package documentation so npm users see package-focused guidance instead of repository workflow notes.
+
+## v1.0.3
+
 - Add named dedupe presets such as `standard`, `heavy`, and `burst-tolerant`.
 - Keep a default mode so the package remains easy to adopt with minimal configuration.
 - Document what each preset is optimized for and when an operator should choose it.
 
-## v1.0.3
+## v1.0.4
 
 - Support config-file driven setup using a simple format such as JSON.
 - Allow operators to choose either:
@@ -25,7 +29,7 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - explicit values such as `slidingWindowSeconds` and `maxSlidingWindowSeconds`
 - Add clear validation errors for invalid or conflicting configuration.
 
-## v1.0.4
+## v1.0.5
 
 - Introduce production-intent configurations aimed at common operating conditions.
 - Candidate presets:
@@ -35,7 +39,7 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - `cross-node-busy`
 - Document the tradeoffs of each preset, including memory pressure, duplicate suppression strength, and tolerance for delayed delivery.
 
-## v1.0.5
+## v1.0.6
 
 - Add lightweight runtime stats so operators can evaluate whether a chosen preset is working well.
 - Candidate stats:
