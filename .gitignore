@@ -3,6 +3,7 @@ node_modules/
 
 # Local environments
 .venv/
+.local/
 .env
 .env.*
 !.env.example
@@ -16,7 +17,7 @@ dist/
 
 # Local npm and Node caches
 .npm/
-.tmp-npm-cache/
+.tmp-npm-cache*/
 .node_repl_history
 npm-debug.log*
 yarn-debug.log*
