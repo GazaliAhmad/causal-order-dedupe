@@ -1,0 +1,781 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import type { EventEnvelope, HlcTimestamp } from "causal-order/types";
+
+const PROFILE_DIR = resolve("profiles");
+
+export type LateArrivalPolicy = "flag" | "drop" | "emit_correction" | "fail";
+
+export interface WorkloadProfile {
+  name: string;
+  description: string;
+  nodeWeights: Record<string, number>;
+  phaseRates: {
+    steadyEventsPerSecond: number;
+    chaosMultiplier: number;
+    chaosJitterMin: number;
+    chaosJitterMax: number;
+  };
+  dependencies: {
+    steadySameNodeChance: number;
+    steadyCrossNodeChance: number;
+    chaoticSameNodeChance: number;
+    chaoticCrossNodeChance: number;
+    sameNodeParentChance: number;
+    crossNodeParentChance: number;
+  };
+  duplicates: {
+    steadyChance: number;
+    chaoticChance: number;
+  };
+  ordering: {
+    steadyPreserveOrderChance: number;
+    chaoticPreserveOrderChance: number;
+  };
+  delays: {
+    steady: {
+      baseMinMs: number;
+      baseMaxMs: number;
+      spikeChance: number;
+      spikeMinMs: number;
+      spikeMaxMs: number;
+    };
+    chaotic: {
+      baseMinMs: number;
+      baseMaxMs: number;
+      slowSpikeChance: number;
+      slowSpikeMinMs: number;
+      slowSpikeMaxMs: number;
+      lateSpikeChance: number;
+      lateSpikeMinMs: number;
+      lateSpikeMaxMs: number;
+      extremeSpikeChance: number;
+      extremeSpikeMinMs: number;
+      extremeSpikeMaxMs: number;
+    };
+  };
+}
+
+export interface RuntimeArtifacts {
+  runDir: string;
+  summaryPath: string;
+  heartbeatPath: string;
+  anomalyPath: string;
+  lifecyclePath: string;
+  configPath: string;
+  orchestratorLogPath: string;
+  collectorStdoutPath: string;
+  collectorStderrPath: string;
+  nodesDir: string;
+}
+
+export type HybridClock = HlcTimestamp & Record<string, unknown>;
+
+export interface EventPayload {
+  phase?: string;
+  service?: string;
+  entityId?: string | null;
+  traceId?: string | null;
+  operation?: string;
+  [key: string]: unknown;
+}
+
+export interface SimulationEvent extends EventEnvelope<EventPayload> {
+  payload: EventPayload;
+}
+
+export interface HintEvent {
+  id: string;
+  nodeId: string;
+  clock: HybridClock;
+  traceId?: string | null;
+  entityId?: string | null;
+  [key: string]: unknown;
+}
+
+export interface RuntimeConfig {
+  durationMs: bigint;
+  steadyForMs: bigint;
+  eventsPerSecond: number;
+  chaosMultiplier: number;
+  batchSize: number;
+  maxLateArrivalMs: bigint;
+  maxTailDrainMs: bigint;
+  lateArrivalPolicy: LateArrivalPolicy;
+  reportEveryMs: bigint;
+  timeScale: number;
+  outputPath: string | null;
+  outputDir: string;
+  runName: string | null;
+  sampleLimit: number;
+  maxLateArrivalSamples: number;
+  strict: boolean;
+  allowUnknownOrder: boolean;
+  detectAnomalies: boolean;
+  tieBreaker: string;
+  nodeIds: string[];
+  workloadProfile: WorkloadProfile;
+  profileSource: string | null;
+  wallStartMs?: number;
+  artifacts?: RuntimeArtifacts;
+}
+
+export const DEFAULT_WORKLOAD_PROFILE: WorkloadProfile = {
+  name: "balanced-default",
+  description: "Balanced synthetic workload with moderate cross-node pressure.",
+  nodeWeights: {
+    "edge-a": 1.0,
+    "edge-b": 1.0,
+    "edge-c": 1.0,
+  },
+  phaseRates: {
+    steadyEventsPerSecond: 16,
+    chaosMultiplier: 1.8,
+    chaosJitterMin: 0.85,
+    chaosJitterMax: 1.2,
+  },
+  dependencies: {
+    steadySameNodeChance: 0.38,
+    steadyCrossNodeChance: 0.24,
+    chaoticSameNodeChance: 0.22,
+    chaoticCrossNodeChance: 0.46,
+    sameNodeParentChance: 0.8,
+    crossNodeParentChance: 0.7,
+  },
+  duplicates: {
+    steadyChance: 0.002,
+    chaoticChance: 0.018,
+  },
+  ordering: {
+    steadyPreserveOrderChance: 1,
+    chaoticPreserveOrderChance: 0.88,
+  },
+  delays: {
+    steady: {
+      baseMinMs: 20,
+      baseMaxMs: 120,
+      spikeChance: 0.03,
+      spikeMinMs: 250,
+      spikeMaxMs: 800,
+    },
+    chaotic: {
+      baseMinMs: 40,
+      baseMaxMs: 250,
+      slowSpikeChance: 0.08,
+      slowSpikeMinMs: 1_500,
+      slowSpikeMaxMs: 8_000,
+      lateSpikeChance: 0.02,
+      lateSpikeMinMs: 10_000,
+      lateSpikeMaxMs: 45_000,
+      extremeSpikeChance: 0.005,
+      extremeSpikeMinMs: 60_000,
+      extremeSpikeMaxMs: 180_000,
+    },
+  },
+};
+
+export const DEFAULTS = {
+  durationMs: parseDurationToMs("4h"),
+  steadyRatio: 0.3,
+  eventsPerSecond: DEFAULT_WORKLOAD_PROFILE.phaseRates.steadyEventsPerSecond,
+  chaosMultiplier: DEFAULT_WORKLOAD_PROFILE.phaseRates.chaosMultiplier,
+  batchSize: 200,
+  maxLateArrivalMs: 60_000n,
+  maxTailDrainMs: parseDurationToMs("5m"),
+  lateArrivalPolicy: "flag" as LateArrivalPolicy,
+  reportEveryMs: parseDurationToMs("30s"),
+  timeScale: 1,
+  outputDir: "artifacts/runs",
+  sampleLimit: 20,
+  maxLateArrivalSamples: 200,
+  strict: false,
+  allowUnknownOrder: true,
+  detectAnomalies: true,
+  tieBreaker: "ingestion_order",
+  nodeIds: ["edge-a", "edge-b", "edge-c"],
+  profile: DEFAULT_WORKLOAD_PROFILE.name,
+  profileFile: null as string | null,
+};
+
+export const HELP_TEXT = `Usage:
+  npm run test:runtime -- [options]
+
+Options:
+  --duration <value>           Total simulated runtime. Supports ms, s, m, h. Default: 4h
+  --steady-for <value>         Simulated steady phase duration before chaos begins
+  --steady-ratio <0..1>        Portion of total duration spent steady when --steady-for is omitted
+  --events-per-second <n>      Average total steady-state throughput across both nodes. Default: 16
+  --chaos-multiplier <n>       Multiplier applied during chaotic phase. Default: 1.8
+  --batch-size <n>             orderEventStream batch size. Default: 200
+  --max-late-arrival-ms <n>    Late-arrival window in milliseconds. Default: 60000
+  --max-tail-drain <value>     Max extra simulated drain time for delayed events. Default: 5m
+  --late-policy <value>        flag | drop | emit_correction | fail. Default: flag
+  --report-every <value>       Progress log interval in simulated time. Default: 30s
+  --time-scale <n>             1 = realtime, 60 = one simulated minute per wall second
+  --output <path>              Explicit summary JSON path
+  --output-dir <path>          Base directory for run artifacts. Default: artifacts/runs
+  --run-name <value>           Optional label appended to the run folder name
+  --profile <value>            Built-in or local profile name from profiles/. Default: balanced-default
+  --profile-file <path>        Explicit workload profile JSON file
+  --sample-limit <n>           Number of anomaly/correction samples to retain. Default: 20
+  --strict                     Enable strict stream validation
+  --disallow-unknown-order     Force allowUnknownOrder=false
+  --help                       Show this message
+
+Examples:
+  npm run test:runtime -- --duration 6h --steady-for 90m --time-scale 1
+  npm run test:runtime -- --duration 20m --time-scale 60 --report-every 2m
+  npm run test:runtime -- --duration 10h --steady-for 2h --run-name overnight-laptop
+`;
+
+export function buildConfig(argv: string[]): RuntimeConfig | { help: true } {
+  const parsed = parseArgs(argv);
+  if (parsed.help) {
+    return { help: true };
+  }
+
+  const resolvedProfile = resolveWorkloadProfile({
+    profileName: parsed.profile ?? DEFAULTS.profile,
+    profileFile: parsed.profileFile ?? DEFAULTS.profileFile,
+  });
+
+  const durationMs = parsed.durationMs ?? DEFAULTS.durationMs;
+  const steadyRatio = parsed.steadyRatio ?? DEFAULTS.steadyRatio;
+  const steadyForMs =
+    parsed.steadyForMs ?? BigInt(Math.floor(Number(durationMs) * steadyRatio));
+
+  if (steadyForMs < 0n || steadyForMs > durationMs) {
+    throw new Error("Steady phase must be between 0 and total duration");
+  }
+
+  return {
+    durationMs,
+    steadyForMs,
+    eventsPerSecond:
+      parsed.eventsPerSecond ??
+      resolvedProfile.phaseRates.steadyEventsPerSecond,
+    chaosMultiplier:
+      parsed.chaosMultiplier ?? resolvedProfile.phaseRates.chaosMultiplier,
+    batchSize: parsed.batchSize ?? DEFAULTS.batchSize,
+    maxLateArrivalMs: parsed.maxLateArrivalMs ?? DEFAULTS.maxLateArrivalMs,
+    maxTailDrainMs: parsed.maxTailDrainMs ?? DEFAULTS.maxTailDrainMs,
+    lateArrivalPolicy:
+      parsed.lateArrivalPolicy ?? DEFAULTS.lateArrivalPolicy,
+    reportEveryMs: parsed.reportEveryMs ?? DEFAULTS.reportEveryMs,
+    timeScale: parsed.timeScale ?? DEFAULTS.timeScale,
+    outputPath: parsed.outputPath ?? null,
+    outputDir: parsed.outputDir ?? DEFAULTS.outputDir,
+    runName: parsed.runName ?? null,
+    sampleLimit: parsed.sampleLimit ?? DEFAULTS.sampleLimit,
+    maxLateArrivalSamples: DEFAULTS.maxLateArrivalSamples,
+    strict: parsed.strict ?? DEFAULTS.strict,
+    allowUnknownOrder: parsed.allowUnknownOrder ?? DEFAULTS.allowUnknownOrder,
+    detectAnomalies: parsed.detectAnomalies ?? DEFAULTS.detectAnomalies,
+    tieBreaker: DEFAULTS.tieBreaker,
+    nodeIds: DEFAULTS.nodeIds,
+    workloadProfile: resolvedProfile,
+    profileSource: parsed.profileFile
+      ? resolve(parsed.profileFile)
+      : parsed.profile && parsed.profile !== DEFAULT_WORKLOAD_PROFILE.name
+        ? resolve(PROFILE_DIR, `${resolvedProfile.name}.json`)
+        : "built-in",
+  };
+}
+
+function parseArgs(argv: string[]) {
+  const result: Record<string, any> = {};
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === "--help") {
+      return { help: true };
+    }
+
+    const [rawKey, inlineValue] = token.split("=", 2);
+    const value = inlineValue !== undefined ? inlineValue : argv[index + 1];
+
+    switch (rawKey) {
+      case "--duration":
+        result.durationMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--steady-for":
+        result.steadyForMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--steady-ratio":
+        result.steadyRatio = parseUnitInterval(
+          requireValue(rawKey, value),
+          rawKey,
+        );
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--events-per-second":
+        result.eventsPerSecond = parsePositiveNumber(
+          requireValue(rawKey, value),
+          rawKey,
+        );
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--chaos-multiplier":
+        result.chaosMultiplier = parsePositiveNumber(
+          requireValue(rawKey, value),
+          rawKey,
+        );
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--batch-size":
+        result.batchSize = parsePositiveInteger(
+          requireValue(rawKey, value),
+          rawKey,
+        );
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--max-late-arrival-ms":
+        result.maxLateArrivalMs = parseNonNegativeBigInt(
+          requireValue(rawKey, value),
+          rawKey,
+        );
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--max-tail-drain":
+        result.maxTailDrainMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--late-policy":
+        result.lateArrivalPolicy = parseLatePolicy(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--report-every":
+        result.reportEveryMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--time-scale":
+        result.timeScale = parsePositiveNumber(requireValue(rawKey, value), rawKey);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--output":
+        result.outputPath = requireValue(rawKey, value);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--output-dir":
+        result.outputDir = requireValue(rawKey, value);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--run-name":
+        result.runName = requireValue(rawKey, value);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--profile":
+        result.profile = requireValue(rawKey, value);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--profile-file":
+        result.profileFile = requireValue(rawKey, value);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--sample-limit":
+        result.sampleLimit = parsePositiveInteger(
+          requireValue(rawKey, value),
+          rawKey,
+        );
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--strict":
+        result.strict = true;
+        break;
+      case "--disallow-unknown-order":
+        result.allowUnknownOrder = false;
+        break;
+      default:
+        throw new Error(`Unknown option: ${token}`);
+    }
+  }
+
+  return result;
+}
+
+function requireValue(flag: string, value?: string): string {
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+  return value;
+}
+
+export function parseDurationToMs(input: string): bigint {
+  const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/i.exec(input.trim());
+  if (!match) {
+    throw new Error(
+      `Invalid duration "${input}". Use values like 500ms, 30s, 15m, 4h`,
+    );
+  }
+
+  const [, amountText, unit] = match;
+  const amount = Number(amountText);
+  const multiplierByUnit = {
+    ms: 1,
+    s: 1_000,
+    m: 60_000,
+    h: 3_600_000,
+  };
+  return BigInt(Math.floor(amount * multiplierByUnit[unit.toLowerCase()]));
+}
+
+function parsePositiveInteger(input: string, label: string): number {
+  const value = Number.parseInt(input, 10);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a positive safe integer`);
+  }
+  return value;
+}
+
+function parsePositiveNumber(input: string, label: string): number {
+  const value = Number(input);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be a positive number`);
+  }
+  return value;
+}
+
+function parseNonNegativeBigInt(input: string, label: string): bigint {
+  if (!/^\d+$/.test(input)) {
+    throw new Error(`${label} must be a non-negative integer`);
+  }
+  return BigInt(input);
+}
+
+function parseUnitInterval(input: string, label: string): number {
+  const value = Number(input);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`${label} must be between 0 and 1`);
+  }
+  return value;
+}
+
+function parseLatePolicy(input: string): LateArrivalPolicy {
+  const value = input.trim() as LateArrivalPolicy;
+  const supported = new Set<LateArrivalPolicy>([
+    "flag",
+    "drop",
+    "emit_correction",
+    "fail",
+  ]);
+  if (!supported.has(value)) {
+    throw new Error(`Unsupported late policy: ${value}`);
+  }
+  return value;
+}
+
+export function formatDuration(milliseconds: number | bigint): string {
+  if (typeof milliseconds === "bigint") {
+    milliseconds = Number(milliseconds);
+  }
+
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return "0s";
+  }
+
+  const hours = Math.floor(milliseconds / 3_600_000);
+  const minutes = Math.floor((milliseconds % 3_600_000) / 60_000);
+  const seconds = Math.floor((milliseconds % 60_000) / 1_000);
+  const ms = Math.floor(milliseconds % 1_000);
+
+  if (hours > 0) {
+    return `${hours}h${minutes.toString().padStart(2, "0")}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m${seconds.toString().padStart(2, "0")}s`;
+  }
+  if (seconds > 0) {
+    return `${seconds}s`;
+  }
+  return `${ms}ms`;
+}
+
+export function createRunLabel(wallStartMs: number, runName: string | null): string {
+  const stamp = new Date(wallStartMs)
+    .toISOString()
+    .replace(/[:]/g, "-")
+    .replace(/\.\d{3}Z$/, "Z");
+  const safeRunName = runName ? `-${sanitizeRunName(runName)}` : "";
+  return `${stamp}${safeRunName}`;
+}
+
+function sanitizeRunName(input: string): string {
+  return (
+    input
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64) || "run"
+  );
+}
+
+export function buildRunArtifacts(
+  config: RuntimeConfig,
+  wallStartMs: number,
+): RuntimeArtifacts {
+  const explicitSummaryPath = config.outputPath ? resolve(config.outputPath) : null;
+  const runDir = explicitSummaryPath
+    ? dirname(explicitSummaryPath)
+    : resolve(config.outputDir, createRunLabel(wallStartMs, config.runName));
+
+  return {
+    runDir,
+    summaryPath: explicitSummaryPath ?? resolve(runDir, "summary.json"),
+    heartbeatPath: resolve(runDir, "heartbeats.ndjson"),
+    anomalyPath: resolve(runDir, "anomalies.ndjson"),
+    lifecyclePath: resolve(runDir, "lifecycle.ndjson"),
+    configPath: resolve(runDir, "run-config.json"),
+    orchestratorLogPath: resolve(runDir, "orchestrator.log"),
+    collectorStdoutPath: resolve(runDir, "collector.stdout.log"),
+    collectorStderrPath: resolve(runDir, "collector.stderr.log"),
+    nodesDir: resolve(runDir, "nodes"),
+  };
+}
+
+export function serializeConfig(config: RuntimeConfig): Record<string, unknown> {
+  return {
+    ...config,
+    durationMs: config.durationMs.toString(),
+    steadyForMs: config.steadyForMs.toString(),
+    maxLateArrivalMs: config.maxLateArrivalMs.toString(),
+    maxTailDrainMs: config.maxTailDrainMs.toString(),
+    reportEveryMs: config.reportEveryMs.toString(),
+  };
+}
+
+export function deserializeConfig(serialized: Record<string, any>): RuntimeConfig {
+  return {
+    ...serialized,
+    durationMs: BigInt(serialized.durationMs),
+    steadyForMs: BigInt(serialized.steadyForMs),
+    maxLateArrivalMs: BigInt(serialized.maxLateArrivalMs),
+    maxTailDrainMs: BigInt(serialized.maxTailDrainMs),
+    reportEveryMs: BigInt(serialized.reportEveryMs),
+  } as RuntimeConfig;
+}
+
+export function createSimulationClock(config: RuntimeConfig & { wallStartMs: number }) {
+  const simulatedStartMs = BigInt(config.wallStartMs);
+  const simulatedEndMs = simulatedStartMs + config.durationMs;
+
+  const simulationNowMs = () => {
+    const elapsedWallMs = Math.max(0, Date.now() - config.wallStartMs);
+    return simulatedStartMs + BigInt(Math.floor(elapsedWallMs * config.timeScale));
+  };
+
+  return {
+    simulatedStartMs,
+    simulatedEndMs,
+    simulationNowMs,
+  };
+}
+
+export async function sleepForSimulatedGap(
+  gapMs: bigint,
+  timeScale: number,
+): Promise<void> {
+  if (gapMs <= 0n) {
+    return;
+  }
+
+  const wallDelayMs = Math.max(1, Math.min(1_000, Math.ceil(Number(gapMs) / timeScale)));
+  await new Promise((resolveDelay) => {
+    setTimeout(resolveDelay, wallDelayMs);
+  });
+}
+
+export function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+export function randomBetween(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+export function sampleIntervalMs(ratePerSecond: number): bigint {
+  const u = Math.max(1e-12, Math.random());
+  return BigInt(Math.max(1, Math.round((-Math.log(u) * 1_000) / ratePerSecond)));
+}
+
+export function serializeEventForWire(event: SimulationEvent): Record<string, unknown> {
+  return {
+    ...event,
+    clock: {
+      ...event.clock,
+      physicalTimeMs: event.clock.physicalTimeMs.toString(),
+    },
+    sequence: event.sequence?.toString(),
+    ingestedAt: event.ingestedAt?.toString(),
+  };
+}
+
+export function deserializeEventFromWire(event: Record<string, any>): SimulationEvent {
+  return {
+    ...event,
+    clock: {
+      ...event.clock,
+      physicalTimeMs: BigInt(event.clock.physicalTimeMs),
+    },
+    sequence: event.sequence !== undefined ? BigInt(event.sequence) : undefined,
+    ingestedAt: event.ingestedAt !== undefined ? BigInt(event.ingestedAt) : undefined,
+  } as SimulationEvent;
+}
+
+export function serializeHintForWire(hint: HintEvent): Record<string, unknown> {
+  return {
+    ...hint,
+    clock: {
+      ...hint.clock,
+      physicalTimeMs: hint.clock.physicalTimeMs.toString(),
+    },
+  };
+}
+
+export function deserializeHintFromWire(hint: Record<string, any>): HintEvent {
+  return {
+    ...hint,
+    clock: {
+      ...hint.clock,
+      physicalTimeMs: BigInt(hint.clock.physicalTimeMs),
+    },
+  } as HintEvent;
+}
+
+function resolveWorkloadProfile({
+  profileName,
+  profileFile,
+}: {
+  profileName: string;
+  profileFile: string | null;
+}): WorkloadProfile {
+  if (profileFile) {
+    return validateWorkloadProfile(
+      mergeWorkloadProfiles(
+        DEFAULT_WORKLOAD_PROFILE,
+        readJsonProfile(resolve(profileFile)),
+      ),
+    );
+  }
+
+  if (!profileName || profileName === DEFAULT_WORKLOAD_PROFILE.name) {
+    return validateWorkloadProfile(DEFAULT_WORKLOAD_PROFILE);
+  }
+
+  const profilePath = resolve(PROFILE_DIR, `${profileName}.json`);
+  return validateWorkloadProfile(
+    mergeWorkloadProfiles(DEFAULT_WORKLOAD_PROFILE, readJsonProfile(profilePath)),
+  );
+}
+
+function readJsonProfile(path: string): Record<string, any> {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Unable to read workload profile ${path}: ${message}`);
+  }
+}
+
+function mergeWorkloadProfiles(
+  base: WorkloadProfile,
+  override: Record<string, any>,
+): WorkloadProfile {
+  return {
+    ...base,
+    ...override,
+    nodeWeights: {
+      ...base.nodeWeights,
+      ...override.nodeWeights,
+    },
+    phaseRates: {
+      ...base.phaseRates,
+      ...override.phaseRates,
+    },
+    dependencies: {
+      ...base.dependencies,
+      ...override.dependencies,
+    },
+    duplicates: {
+      ...base.duplicates,
+      ...override.duplicates,
+    },
+    ordering: {
+      ...base.ordering,
+      ...override.ordering,
+    },
+    delays: {
+      ...base.delays,
+      ...override.delays,
+      steady: {
+        ...base.delays.steady,
+        ...override.delays?.steady,
+      },
+      chaotic: {
+        ...base.delays.chaotic,
+        ...override.delays?.chaotic,
+      },
+    },
+  };
+}
+
+function validateWorkloadProfile(profile: WorkloadProfile): WorkloadProfile {
+  const bounded = [
+    [
+      "dependencies.steadySameNodeChance",
+      profile.dependencies.steadySameNodeChance,
+    ],
+    [
+      "dependencies.steadyCrossNodeChance",
+      profile.dependencies.steadyCrossNodeChance,
+    ],
+    [
+      "dependencies.chaoticSameNodeChance",
+      profile.dependencies.chaoticSameNodeChance,
+    ],
+    [
+      "dependencies.chaoticCrossNodeChance",
+      profile.dependencies.chaoticCrossNodeChance,
+    ],
+    ["dependencies.sameNodeParentChance", profile.dependencies.sameNodeParentChance],
+    ["dependencies.crossNodeParentChance", profile.dependencies.crossNodeParentChance],
+    ["duplicates.steadyChance", profile.duplicates.steadyChance],
+    ["duplicates.chaoticChance", profile.duplicates.chaoticChance],
+    [
+      "ordering.steadyPreserveOrderChance",
+      profile.ordering.steadyPreserveOrderChance,
+    ],
+    [
+      "ordering.chaoticPreserveOrderChance",
+      profile.ordering.chaoticPreserveOrderChance,
+    ],
+  ] as Array<[string, number]>;
+
+  for (const [label, value] of bounded) {
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error(`Workload profile field ${label} must be between 0 and 1`);
+    }
+  }
+
+  if (
+    !Number.isFinite(profile.phaseRates.steadyEventsPerSecond) ||
+    profile.phaseRates.steadyEventsPerSecond <= 0
+  ) {
+    throw new Error(
+      "Workload profile phaseRates.steadyEventsPerSecond must be positive",
+    );
+  }
+
+  if (
+    !Number.isFinite(profile.phaseRates.chaosMultiplier) ||
+    profile.phaseRates.chaosMultiplier <= 0
+  ) {
+    throw new Error(
+      "Workload profile phaseRates.chaosMultiplier must be positive",
+    );
+  }
+
+  return profile;
+}
