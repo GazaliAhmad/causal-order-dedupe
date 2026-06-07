@@ -1,7 +1,8 @@
 {
   "name": "@causal-order/dedupe",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Deduplication support for causal-order event streams.",
+  "license": "MIT",
   "type": "module",
   "main": "./.build/src/dedupe.js",
   "types": "./.build/src/dedupe.d.ts",

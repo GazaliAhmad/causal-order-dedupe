@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-06-07
+
+### Fixed
+
+- Added the missing `license` manifest field so the published npm package correctly reports the bundled MIT license.
+
 ## [1.0.0] - 2026-06-07
 
 Initial release of `@causal-order/dedupe`.

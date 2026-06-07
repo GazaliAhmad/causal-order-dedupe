@@ -2,7 +2,7 @@
 
 Deduplication support for `causal-order`, plus a deployment-style test harness for exercising duplicate-heavy event streams.
 
-Version `1.0.0`.
+Version `1.0.1`.
 
 Release notes: [CHANGELOG.md](./CHANGELOG.md)
 

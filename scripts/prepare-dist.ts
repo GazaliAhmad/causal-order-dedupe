@@ -19,6 +19,7 @@ const publishedPackage = {
   name: rootPackage.name,
   version: rootPackage.version,
   description: rootPackage.description,
+  license: rootPackage.license,
   type: rootPackage.type,
   main: "./src/dedupe.js",
   types: "./src/dedupe.d.ts",
