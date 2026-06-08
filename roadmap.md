@@ -20,16 +20,26 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## v1.0.4
 
-- Add named dedupe presets such as `standard`, `heavy`, and `burst-tolerant`.
-- Keep a default mode so the package remains easy to adopt with minimal configuration.
-- Document what each preset is optimized for and when an operator should choose it.
-- Introduce production-intent configurations aimed at common operating conditions.
-- Candidate presets:
+- Add first-class preset support to `DedupeGateway`.
+- Ship one consistent preset set:
   - `standard`
   - `heavy-duplicates`
   - `high-latency`
   - `cross-node-busy`
+- Keep a default mode so the package remains easy to adopt with minimal configuration.
+- Treat named presets as the guided operator path.
+- Treat manual raw timing values as the custom path.
+- Do not add a literal `custom` preset name; custom behavior should come from explicit raw values.
+- Make no-preset behavior match `standard`.
+- Preserve the existing raw timing options for operators who want manual control.
+- Make `standard` match the current default behavior so upgrades stay low-risk:
+  - `slidingWindowSeconds = 180`
+  - `maxSlidingWindowSeconds = 300`
+- Keep `standard` positioned as a conservative default for deployments where the downstream engine is already working with roughly a `90s` late-arrival horizon.
+- Document what each preset is optimized for and when an operator should choose it.
 - Document the tradeoffs of each preset, including memory pressure, duplicate suppression strength, and tolerance for delayed delivery.
+- Document how `slidingWindowSeconds` and `maxSlidingWindowSeconds` relate to the downstream engine horizon so operators understand why dedupe windows below the engine window are usually risky.
+- Add tests that cover preset resolution, default behavior, manual configuration, and invalid preset names.
 
 ## v1.0.5
 

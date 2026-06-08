@@ -70,6 +70,22 @@ Options:
 - `maxSlidingWindowSeconds`: hard upper bound for dynamic window growth, default `300`
 - `nowProvider` or `now_provider`: function that returns the current time in milliseconds, compatible with `BigInt`
 
+`slidingWindowSeconds` controls how long the dedupe layer remembers an accepted
+event identity before `cleanup()` can evict it. If the same event arrives again
+while that identity is still cached, it is dropped as a duplicate. Once the
+identity ages out, the event can be accepted again.
+
+`maxSlidingWindowSeconds` is the ceiling used by `updateWindow(seconds)`. It
+does not widen the active dedupe window on its own, but it sets the maximum
+window the gateway is allowed to use later.
+
+If the downstream `causal-order` engine is operating with a `90s` late-arrival
+horizon, setting `slidingWindowSeconds` below `90` usually means some delayed
+duplicates can fall out of the dedupe cache before the engine itself is done
+considering that period. In practice, operators will usually want the dedupe
+window to be at least as large as the engine horizon, and often somewhat higher
+to absorb cleanup cadence, transport jitter, and delayed delivery spikes.
+
 ### `filter(event)`
 
 Returns:
