@@ -16,20 +16,33 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.0.3` cleaned the published package documentation so npm users see package-focused guidance instead of repository workflow notes.
+- Version `1.0.4` is now implemented:
+  - first-class preset support exists in `DedupeGateway`
+  - default mode behaves as `standard`
+  - runtime profile tests can select a dedupe preset
+  - operator guides now cover tuning and workload-profile construction
+  - drop-in safeguards now include validation and automatic cleanup by default
 
 ## v1.0.4
 
-- Add named dedupe presets such as `standard`, `heavy`, and `burst-tolerant`.
-- Keep a default mode so the package remains easy to adopt with minimal configuration.
-- Document what each preset is optimized for and when an operator should choose it.
-- Introduce production-intent configurations aimed at common operating conditions.
-- Candidate presets:
-  - `standard`
-  - `heavy-duplicates`
-  - `high-latency`
-  - `cross-node-busy`
-- Document the tradeoffs of each preset, including memory pressure, duplicate suppression strength, and tolerance for delayed delivery.
+- Completed first-class preset support in `DedupeGateway`.
+- Completed one consistent preset set: `standard`, `heavy-duplicates`, `high-latency`, and `cross-node-busy`.
+- Completed the default-mode contract:
+  - default mode remains easy to adopt with minimal configuration
+  - default mode is `standard`
+  - named presets are the guided operator path
+  - manual raw timing values remain the custom path
+  - no literal `custom` preset name was added
+  - no-preset behavior matches `standard`
+  - existing raw timing options remain available
+- Completed `standard` compatibility with the current default behavior:
+  - `slidingWindowSeconds = 180`
+  - `maxSlidingWindowSeconds = 300`
+- Completed operator documentation for preset guidance, tradeoffs, and window sizing against the downstream engine horizon.
+- Completed preset tests for resolution, default behavior, manual configuration, and invalid preset names.
+- Extended the implementation with runtime profile selection through `--dedupe-preset`.
+- Extended the implementation with automatic cleanup by default for drop-in use.
+- Extended the implementation with clear constructor validation for invalid raw timing configuration.
 
 ## v1.0.5
 

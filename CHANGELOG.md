@@ -2,11 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.4]
+
+### Added
+
+- Added first-class dedupe preset support with `standard`, `heavy-duplicates`, `high-latency`, and `cross-node-busy`.
+- Added a focused `test:presets` script and preset contract coverage for default behavior, overrides, invalid presets, and cleanup modes.
+- Added operator-facing guides under `guides/` for dedupe tuning and workload-profile construction.
+- Added runtime harness support for `--dedupe-preset` so deployment-style profile runs can exercise named dedupe modes directly.
+
+### Changed
+
+- Updated the `causal-order` dependency to `^1.0.0`.
+- Improved `DedupeGateway` drop-in behavior with config validation, automatic cleanup by default, and encapsulated internal state.
+- Updated the `README.md` to point operators to the new guides and to reflect the new default cleanup behavior.
+
 ## [1.0.3]
 
 ### Changed
 
-- Clarified the published `README.md` version and documented that `cleanup()` should be called periodically in long-running processes so cached identities expire as expected.
+- Clarified the published `README.md` version and documented the cleanup expectations for long-running processes.
 
 ## [1.0.2]
 
