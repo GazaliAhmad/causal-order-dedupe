@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { EventEnvelope, HlcTimestamp } from "causal-order/types";
+import type { DedupePreset } from "../src/dedupe.js";
 
 const PROFILE_DIR = resolve("profiles");
 
@@ -113,6 +114,7 @@ export interface RuntimeConfig {
   allowUnknownOrder: boolean;
   detectAnomalies: boolean;
   tieBreaker: string;
+  dedupePreset: DedupePreset;
   nodeIds: string[];
   workloadProfile: WorkloadProfile;
   profileSource: string | null;
@@ -192,6 +194,7 @@ export const DEFAULTS = {
   allowUnknownOrder: true,
   detectAnomalies: true,
   tieBreaker: "ingestion_order",
+  dedupePreset: "standard" as DedupePreset,
   nodeIds: ["edge-a", "edge-b", "edge-c"],
   profile: DEFAULT_WORKLOAD_PROFILE.name,
   profileFile: null as string | null,
@@ -212,6 +215,7 @@ Options:
   --late-policy <value>        flag | drop | emit_correction | fail. Default: flag
   --report-every <value>       Progress log interval in simulated time. Default: 30s
   --time-scale <n>             1 = realtime, 60 = one simulated minute per wall second
+  --dedupe-preset <value>      standard | heavy-duplicates | high-latency | cross-node-busy. Default: standard
   --output <path>              Explicit summary JSON path
   --output-dir <path>          Base directory for run artifacts. Default: artifacts/runs
   --run-name <value>           Optional label appended to the run folder name
@@ -263,6 +267,7 @@ export function buildConfig(argv: string[]): RuntimeConfig | { help: true } {
       parsed.lateArrivalPolicy ?? DEFAULTS.lateArrivalPolicy,
     reportEveryMs: parsed.reportEveryMs ?? DEFAULTS.reportEveryMs,
     timeScale: parsed.timeScale ?? DEFAULTS.timeScale,
+    dedupePreset: parsed.dedupePreset ?? DEFAULTS.dedupePreset,
     outputPath: parsed.outputPath ?? null,
     outputDir: parsed.outputDir ?? DEFAULTS.outputDir,
     runName: parsed.runName ?? null,
@@ -352,6 +357,13 @@ function parseArgs(argv: string[]) {
         break;
       case "--time-scale":
         result.timeScale = parsePositiveNumber(requireValue(rawKey, value), rawKey);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--dedupe-preset":
+        result.dedupePreset = parseDedupePreset(
+          requireValue(rawKey, value),
+          rawKey,
+        );
         index += inlineValue === undefined ? 1 : 0;
         break;
       case "--output":
@@ -462,6 +474,22 @@ function parseLatePolicy(input: string): LateArrivalPolicy {
   ]);
   if (!supported.has(value)) {
     throw new Error(`Unsupported late policy: ${value}`);
+  }
+  return value;
+}
+
+function parseDedupePreset(input: string, label: string): DedupePreset {
+  const value = input.trim() as DedupePreset;
+  const supported = new Set<DedupePreset>([
+    "standard",
+    "heavy-duplicates",
+    "high-latency",
+    "cross-node-busy",
+  ]);
+  if (!supported.has(value)) {
+    throw new Error(
+      `${label} must be one of: standard, heavy-duplicates, high-latency, cross-node-busy`,
+    );
   }
   return value;
 }

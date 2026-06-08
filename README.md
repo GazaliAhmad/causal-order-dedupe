@@ -20,11 +20,9 @@ Runtime compatibility:
 
 ## What It Does
 
-`DedupeGateway` keeps a sliding-window cache of event identities and lets you
-drop repeat deliveries before handing events to `causal-order`.
+`DedupeGateway` keeps a sliding-window cache of event identities and lets you drop repeat deliveries before handing events to `causal-order`.
 
-Cache entries expire when `cleanup()` runs, so long-lived processes should call
-it periodically to keep the effective dedupe window moving forward.
+By default, the gateway performs lightweight automatic cleanup during filtering so old identities can age out without extra wiring. You can still call `cleanup()` manually when you want tighter control over eviction timing.
 
 An event is deduplicated by:
 
@@ -54,9 +52,13 @@ if (dedupe.filter(event)) {
   // forward event into causal-order
 }
 
-// call periodically in long-running processes
+// optional when you want tighter manual control
 dedupe.cleanup();
 ```
+
+## Operator Guide
+
+This repository includes additional operator and workload-profile guides under `guides/` for local development and evaluation workflows.
 
 ## API
 
@@ -66,25 +68,18 @@ Creates a dedupe gateway. The `options` object is optional.
 
 Options:
 
+- `preset`: named mode such as `standard`, `heavy-duplicates`, `high-latency`, or `cross-node-busy`
 - `slidingWindowSeconds`: initial lookback window, default `180`
 - `maxSlidingWindowSeconds`: hard upper bound for dynamic window growth, default `300`
+- `autoCleanup`: whether lightweight automatic cleanup runs during filtering, default `true`
+- `autoCleanupIntervalSeconds`: minimum interval between automatic cleanup passes, default `30`
 - `nowProvider` or `now_provider`: function that returns the current time in milliseconds, compatible with `BigInt`
 
-`slidingWindowSeconds` controls how long the dedupe layer remembers an accepted
-event identity before `cleanup()` can evict it. If the same event arrives again
-while that identity is still cached, it is dropped as a duplicate. Once the
-identity ages out, the event can be accepted again.
+`slidingWindowSeconds` controls how long the dedupe layer remembers an accepted event identity before automatic or manual cleanup can evict it. If the same event arrives again while that identity is still cached, it is dropped as a duplicate. Once the identity ages out, the event can be accepted again.
 
-`maxSlidingWindowSeconds` is the ceiling used by `updateWindow(seconds)`. It
-does not widen the active dedupe window on its own, but it sets the maximum
-window the gateway is allowed to use later.
+`maxSlidingWindowSeconds` is the ceiling used by `updateWindow(seconds)`. It does not widen the active dedupe window on its own, but it sets the maximum window the gateway is allowed to use later.
 
-If the downstream `causal-order` engine is operating with a `90s` late-arrival
-horizon, setting `slidingWindowSeconds` below `90` usually means some delayed
-duplicates can fall out of the dedupe cache before the engine itself is done
-considering that period. In practice, operators will usually want the dedupe
-window to be at least as large as the engine horizon, and often somewhat higher
-to absorb cleanup cadence, transport jitter, and delayed delivery spikes.
+If the downstream `causal-order` engine is operating with a `90s` late-arrival horizon, setting `slidingWindowSeconds` below `90` usually means some delayed duplicates can fall out of the dedupe cache before the engine itself is done considering that period. In practice, operators will usually want the dedupe window to be at least as large as the engine horizon, and often somewhat higher to absorb cleanup cadence, transport jitter, and delayed delivery spikes.
 
 ### `filter(event)`
 
@@ -101,8 +96,7 @@ Adjusts the active dedupe window, capped by `maxSlidingWindowSeconds`.
 
 Evicts cached identities older than the current sliding window.
 
-Call this periodically in long-running processes so old identities age out and
-the dedupe window continues to advance.
+This is optional for most drop-in use because automatic cleanup is enabled by default. Call it manually when you want stricter control over eviction timing or when `autoCleanup` is disabled.
 
 ### `destroy()`
 
