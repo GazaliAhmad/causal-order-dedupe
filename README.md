@@ -2,12 +2,23 @@
 
 Deduplication support for `causal-order` event streams.
 
+## Relationship to [causal-order](https://www.npmjs.com/package/causal-order)
+
+`@causal-order/dedupe` is an extension package for [`causal-order`](https://www.npmjs.com/package/causal-order).
+
+It provides duplicate-event detection before events enter the causal ordering pipeline and is intended to sit immediately before the ordering stage in stream-processing, replay, recovery, and ingestion workflows built on top of the `causal-order` runtime.
+
+| Package                | Purpose                            |
+| ---------------------- | ---------------------------------- |
+| `causal-order`         | Core causal event ordering runtime |
+| `@causal-order/dedupe` | Duplicate-event filtering layer    |
+
 Version `1.0.2`.
 
 Runtime compatibility:
 
-- Node `20+`
-- ESM-only package
+* Node `20+`
+* ESM-only package
 
 ## What It Does
 
