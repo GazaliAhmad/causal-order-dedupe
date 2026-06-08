@@ -58,7 +58,10 @@ dedupe.cleanup();
 
 ## Operator Guide
 
-This repository includes additional operator and workload-profile guides under `guides/` for local development and evaluation workflows.
+This repository includes additional operator and workload-profile guides for local development and evaluation workflows:
+
+- [Operator Guide](guides/operator-tuning.md)
+- [Building Workload Profiles](guides/building-workload-profiles.md)
 
 ## API
 
