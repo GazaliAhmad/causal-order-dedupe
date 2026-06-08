@@ -1,6 +1,8 @@
 # Roadmap
 
-This roadmap focuses on operator ease of use first.
+This roadmap is specifically for `@causal-order/dedupe`.
+
+It focuses on operator ease of use first.
 
 The goal is to make `@causal-order/dedupe` easy to deploy without forcing operators to tune low-level timing values up front. Most users should be able to start with a sensible preset, then move to heavier or more latency-tolerant behavior only when needed.
 
@@ -9,28 +11,18 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 - Prefer safe defaults over mandatory tuning.
 - Let operators choose intent-driven presets instead of raw timing values where possible.
 - Keep advanced manual configuration available for teams that need finer control.
+- Expose enough runtime visibility for operators to validate behavior in production.
 - Align local test harness profiles with operator-facing package concepts over time.
 
-## v1.0.2
+## Current Status
 
-- Clean the published package documentation so npm users see package-focused guidance instead of repository workflow notes.
+- Version `1.0.3` cleaned the published package documentation so npm users see package-focused guidance instead of repository workflow notes.
 
-## v1.0.3
+## v1.0.4
 
 - Add named dedupe presets such as `standard`, `heavy`, and `burst-tolerant`.
 - Keep a default mode so the package remains easy to adopt with minimal configuration.
 - Document what each preset is optimized for and when an operator should choose it.
-
-## v1.0.4
-
-- Support config-file driven setup using a simple format such as JSON.
-- Allow operators to choose either:
-  - a preset name like `standard`
-  - explicit values such as `slidingWindowSeconds` and `maxSlidingWindowSeconds`
-- Add clear validation errors for invalid or conflicting configuration.
-
-## v1.0.5
-
 - Introduce production-intent configurations aimed at common operating conditions.
 - Candidate presets:
   - `standard`
@@ -38,6 +30,14 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - `high-latency`
   - `cross-node-busy`
 - Document the tradeoffs of each preset, including memory pressure, duplicate suppression strength, and tolerance for delayed delivery.
+
+## v1.0.5
+
+- Support config-file driven setup using a simple format such as JSON.
+- Allow operators to choose either:
+  - a preset name like `standard`
+  - explicit values such as `slidingWindowSeconds` and `maxSlidingWindowSeconds`
+- Add clear validation errors for invalid or conflicting configuration.
 
 ## v1.0.6
 

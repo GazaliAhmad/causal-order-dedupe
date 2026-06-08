@@ -13,8 +13,6 @@ It provides duplicate-event detection before events enter the causal ordering pi
 | `causal-order`         | Core causal event ordering runtime |
 | `@causal-order/dedupe` | Duplicate-event filtering layer    |
 
-Version `1.0.2`.
-
 Runtime compatibility:
 
 * Node `20+`
@@ -24,6 +22,9 @@ Runtime compatibility:
 
 `DedupeGateway` keeps a sliding-window cache of event identities and lets you
 drop repeat deliveries before handing events to `causal-order`.
+
+Cache entries expire when `cleanup()` runs, so long-lived processes should call
+it periodically to keep the effective dedupe window moving forward.
 
 An event is deduplicated by:
 
@@ -53,6 +54,7 @@ if (dedupe.filter(event)) {
   // forward event into causal-order
 }
 
+// call periodically in long-running processes
 dedupe.cleanup();
 ```
 
@@ -82,6 +84,9 @@ Adjusts the active dedupe window, capped by `maxSlidingWindowSeconds`.
 ### `cleanup()`
 
 Evicts cached identities older than the current sliding window.
+
+Call this periodically in long-running processes so old identities age out and
+the dedupe window continues to advance.
 
 ### `destroy()`
 

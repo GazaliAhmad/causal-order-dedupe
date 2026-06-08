@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3]
+
+### Changed
+
+- Clarified the published `README.md` version and documented that `cleanup()` should be called periodically in long-running processes so cached identities expire as expected.
+
 ## [1.0.2]
 
 ### Changed
