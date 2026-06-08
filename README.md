@@ -63,6 +63,12 @@ This repository includes additional operator and workload-profile guides for loc
 - [Operator Guide](guides/operator-tuning.md)
 - [Building Workload Profiles](guides/building-workload-profiles.md)
 
+## Project Docs
+
+- [Compatibility](COMPATIBILITY.md)
+- [Security Policy](SECURITY.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+
 ## API
 
 ### `new DedupeGateway(options)`
