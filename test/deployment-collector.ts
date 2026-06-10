@@ -35,7 +35,7 @@ const config = deserializeConfig(JSON.parse(rawConfig) as JsonRecord) as Runtime
 const clock = createSimulationClock(config);
 
 const dedupeGate = new DedupeGateway({
-  preset: config.dedupePreset,
+  ...config.dedupeConfig,
   nowProvider: () => clock.simulationNowMs(),
 });
 

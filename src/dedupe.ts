@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 export interface DedupeEvent {
   id?: string | null;
   nodeId?: string | null;
@@ -45,6 +48,40 @@ export interface DedupeGatewayConfig {
   now_provider?: () => bigint | number;
 }
 
+export interface DedupeGatewayFileConfig {
+  preset?: DedupePreset;
+  maxSlidingWindowSeconds?: number;
+  slidingWindowSeconds?: number;
+  autoCleanup?: boolean;
+  autoCleanupIntervalSeconds?: number;
+}
+
+interface ResolvedDedupeGatewayConfig {
+  maxSlidingWindowSeconds: number;
+  slidingWindowSeconds: number;
+  autoCleanup: boolean;
+  autoCleanupIntervalSeconds: number;
+  nowProvider: (() => bigint | number) | null;
+}
+
+export function loadDedupeGatewayConfigFile(
+  configPath: string,
+): DedupeGatewayFileConfig {
+  const resolvedPath = resolve(configPath);
+  const rawConfig = readJsonConfigFile(resolvedPath);
+  return parseDedupeGatewayConfigFile(rawConfig, resolvedPath);
+}
+
+export function createDedupeGatewayFromConfigFile(
+  configPath: string,
+  overrides: DedupeGatewayConfig = {},
+): DedupeGateway {
+  return new DedupeGateway({
+    ...loadDedupeGatewayConfigFile(configPath),
+    ...overrides,
+  });
+}
+
 export class DedupeGateway {
   #maxSlidingWindowMs: bigint;
   #currentWindowMs: bigint;
@@ -55,40 +92,19 @@ export class DedupeGateway {
   #lastCleanupAtMs: bigint | null;
 
   constructor(config: DedupeGatewayConfig = {}) {
-    const preset = resolveDedupePreset(config.preset);
-    const maxSeconds = resolvePositiveSeconds({
-      value: config.maxSlidingWindowSeconds,
-      fallback: preset.maxSlidingWindowSeconds,
-      label: "maxSlidingWindowSeconds",
-    });
-    const initialSeconds = resolvePositiveSeconds({
-      value: config.slidingWindowSeconds,
-      fallback: preset.slidingWindowSeconds,
-      label: "slidingWindowSeconds",
-    });
+    const resolved = resolveGatewayConfig(config);
 
-    if (initialSeconds > maxSeconds) {
-      throw new Error(
-        "slidingWindowSeconds must be less than or equal to maxSlidingWindowSeconds",
-      );
-    }
-
-    this.#maxSlidingWindowMs = BigInt(Math.floor(maxSeconds * 1000));
-    this.#currentWindowMs = BigInt(Math.floor(initialSeconds * 1000));
+    this.#maxSlidingWindowMs = BigInt(
+      Math.floor(resolved.maxSlidingWindowSeconds * 1000),
+    );
+    this.#currentWindowMs = BigInt(
+      Math.floor(resolved.slidingWindowSeconds * 1000),
+    );
     this.#cache = new Map();
-    this.#nowProvider =
-      config.nowProvider ??
-      config.now_provider ??
-      (() => BigInt(Date.now()));
-    this.#autoCleanupEnabled = config.autoCleanup ?? true;
+    this.#nowProvider = resolved.nowProvider ?? (() => BigInt(Date.now()));
+    this.#autoCleanupEnabled = resolved.autoCleanup;
     this.#autoCleanupIntervalMs = BigInt(
-      Math.floor(
-        resolvePositiveSeconds({
-          value: config.autoCleanupIntervalSeconds,
-          fallback: 30,
-          label: "autoCleanupIntervalSeconds",
-        }) * 1000,
-      ),
+      Math.floor(resolved.autoCleanupIntervalSeconds * 1000),
     );
     this.#lastCleanupAtMs = null;
   }
@@ -181,6 +197,40 @@ export class DedupeGateway {
   }
 }
 
+function resolveGatewayConfig(
+  config: DedupeGatewayConfig,
+): ResolvedDedupeGatewayConfig {
+  const preset = resolveDedupePreset(config.preset);
+  const maxSlidingWindowSeconds = resolvePositiveSeconds({
+    value: config.maxSlidingWindowSeconds,
+    fallback: preset.maxSlidingWindowSeconds,
+    label: "maxSlidingWindowSeconds",
+  });
+  const slidingWindowSeconds = resolvePositiveSeconds({
+    value: config.slidingWindowSeconds,
+    fallback: preset.slidingWindowSeconds,
+    label: "slidingWindowSeconds",
+  });
+
+  if (slidingWindowSeconds > maxSlidingWindowSeconds) {
+    throw invalidDedupeConfigError(
+      "slidingWindowSeconds cannot be greater than maxSlidingWindowSeconds",
+    );
+  }
+
+  return {
+    maxSlidingWindowSeconds,
+    slidingWindowSeconds,
+    autoCleanup: config.autoCleanup ?? true,
+    autoCleanupIntervalSeconds: resolvePositiveSeconds({
+      value: config.autoCleanupIntervalSeconds,
+      fallback: 30,
+      label: "autoCleanupIntervalSeconds",
+    }),
+    nowProvider: config.nowProvider ?? config.now_provider ?? null,
+  };
+}
+
 function resolveDedupePreset(preset: DedupeGatewayConfig["preset"]): {
   slidingWindowSeconds: number;
   maxSlidingWindowSeconds: number;
@@ -189,12 +239,16 @@ function resolveDedupePreset(preset: DedupeGatewayConfig["preset"]): {
     return DEDUPE_PRESET_WINDOWS.standard;
   }
 
-  const resolved = DEDUPE_PRESET_WINDOWS[preset];
+  const resolved = DEDUPE_PRESET_WINDOWS[resolveDedupePresetName(preset)];
   if (!resolved) {
-    throw new Error(`Unsupported dedupe preset: ${preset}`);
+    throw invalidDedupeConfigError(`unsupported preset "${preset}"`);
   }
 
   return resolved;
+}
+
+function resolveDedupePresetName(preset: string): DedupePreset {
+  return preset.trim() as DedupePreset;
 }
 
 function resolvePositiveSeconds({
@@ -211,8 +265,157 @@ function resolvePositiveSeconds({
   }
 
   if (!Number.isFinite(value) || value <= 0) {
+    throw invalidDedupeConfigError(
+      `${label} must be a positive finite number`,
+    );
+  }
+
+  return value;
+}
+
+function readJsonConfigFile(resolvedPath: string): unknown {
+  try {
+    return JSON.parse(readFileSync(resolvedPath, "utf8"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Unable to read dedupe config file ${resolvedPath}: ${message}`,
+    );
+  }
+}
+
+function parseDedupeGatewayConfigFile(
+  value: unknown,
+  resolvedPath: string,
+): DedupeGatewayFileConfig {
+  const record = resolveObjectRecord(
+    value,
+    `Dedupe config file ${resolvedPath}`,
+  );
+  const supportedKeys = new Set([
+    "preset",
+    "slidingWindowSeconds",
+    "maxSlidingWindowSeconds",
+    "autoCleanup",
+    "autoCleanupIntervalSeconds",
+  ]);
+
+  for (const key of Object.keys(record)) {
+    if (!supportedKeys.has(key)) {
+      throw invalidDedupeConfigFileError(
+        resolvedPath,
+        `unknown field "${key}"`,
+      );
+    }
+  }
+
+  const hasPreset = "preset" in record;
+  const hasSlidingWindow = "slidingWindowSeconds" in record;
+  const hasMaxSlidingWindow = "maxSlidingWindowSeconds" in record;
+  const hasExplicitWindowConfig = hasSlidingWindow || hasMaxSlidingWindow;
+
+  if (hasPreset && hasExplicitWindowConfig) {
+    throw invalidDedupeConfigFileError(
+      resolvedPath,
+      'choose either "preset" or explicit "slidingWindowSeconds" and "maxSlidingWindowSeconds", not both',
+    );
+  }
+
+  if (hasExplicitWindowConfig && !(hasSlidingWindow && hasMaxSlidingWindow)) {
+    throw invalidDedupeConfigFileError(
+      resolvedPath,
+      'explicit window config requires both "slidingWindowSeconds" and "maxSlidingWindowSeconds"',
+    );
+  }
+
+  const config: DedupeGatewayFileConfig = {};
+
+  if (hasPreset) {
+    config.preset = parseFilePreset(
+      record.preset,
+      `Dedupe config file field "preset" in ${resolvedPath}`,
+    );
+  }
+
+  if (hasSlidingWindow) {
+    config.slidingWindowSeconds = parsePositiveFiniteNumber(
+      record.slidingWindowSeconds,
+      `Dedupe config file field "slidingWindowSeconds" in ${resolvedPath}`,
+    );
+  }
+
+  if (hasMaxSlidingWindow) {
+    config.maxSlidingWindowSeconds = parsePositiveFiniteNumber(
+      record.maxSlidingWindowSeconds,
+      `Dedupe config file field "maxSlidingWindowSeconds" in ${resolvedPath}`,
+    );
+  }
+
+  if ("autoCleanup" in record) {
+    config.autoCleanup = parseBooleanValue(
+      record.autoCleanup,
+      `Dedupe config file field "autoCleanup" in ${resolvedPath}`,
+    );
+  }
+
+  if ("autoCleanupIntervalSeconds" in record) {
+    config.autoCleanupIntervalSeconds = parsePositiveFiniteNumber(
+      record.autoCleanupIntervalSeconds,
+      `Dedupe config file field "autoCleanupIntervalSeconds" in ${resolvedPath}`,
+    );
+  }
+
+  resolveGatewayConfig(config);
+  return config;
+}
+
+function resolveObjectRecord(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must contain a JSON object`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function parseFilePreset(value: unknown, label: string): DedupePreset {
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string`);
+  }
+
+  const preset = resolveDedupePresetName(value);
+  if (!DEDUPE_PRESET_WINDOWS[preset]) {
+    throw invalidDedupeConfigError(`unsupported preset "${value}"`);
+  }
+
+  return preset;
+}
+
+function parsePositiveFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new Error(`${label} must be a positive finite number`);
   }
 
   return value;
+}
+
+function parseBooleanValue(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${label} must be a boolean`);
+  }
+
+  return value;
+}
+
+function invalidDedupeConfigError(detail: string): Error {
+  return new Error(`Invalid dedupe config: ${detail}`);
+}
+
+function invalidDedupeConfigFileError(
+  resolvedPath: string,
+  detail: string,
+): Error {
+  return new Error(`Invalid dedupe config file ${resolvedPath}: ${detail}`);
 }

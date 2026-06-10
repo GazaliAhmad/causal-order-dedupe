@@ -1,15 +1,20 @@
 # Building Workload Profiles
 
-This guide explains how to create a workload profile for the local runtime
-harness in `profiles/`.
+This guide explains how to create a workload profile for the local runtime harness in `profiles/`.
 
-Use this when you want to simulate a production shape, replay issue, latency
-spike pattern, or stress scenario that is closer to your own system.
+Use this when you want to simulate a production shape, replay issue, latency spike pattern, or stress scenario that is closer to your own system.
+
+This is a repo testing concern, not the package deployment path.
+
+If you are trying to configure `DedupeGateway` for your own deployed service, see [deployment.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/deployment.md).
+
+If you want to build a dedupe config JSON file instead of a workload profile, see [building-dedupe-configs.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/building-dedupe-configs.md).
+
+If the runtime rejects a profile or config, see [operator-errors.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/operator-errors.md).
 
 ## What a Profile Does
 
-A workload profile defines the simulated traffic and delivery conditions for the
-runtime harness.
+A workload profile defines the simulated traffic and delivery conditions for the runtime harness.
 
 It does not configure the dedupe layer directly.
 
@@ -17,17 +22,20 @@ Instead, it answers:
 
 `What kind of workload should the ordering and dedupe stack be tested against?`
 
-Then you pair that profile with a dedupe preset such as `standard` or
-`heavy-duplicates`.
+Then you pair that profile with a dedupe preset such as `standard` or `heavy-duplicates`.
+
+If you want manual dedupe windows for repo testing, pass a separate config file with `--dedupe-config`, for example `configs/dedupe-manual-heavy.json`.
 
 ## Where Profiles Live
 
 Profiles live under `profiles/` as JSON files.
 
+Dedupe config files are a separate concern and should live under `configs/`, not under `profiles/`.
+
 Examples in this repo:
 
-- [expected-production.json](/abs/c:/dev/causal-order-dedupe/profiles/expected-production.json:1)
-- [break-the-wire.json](/abs/c:/dev/causal-order-dedupe/profiles/break-the-wire.json:1)
+- [expected-production.json](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/profiles/expected-production.json)
+- [break-the-wire.json](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/profiles/break-the-wire.json)
 
 ## Minimum Structure
 
@@ -122,8 +130,7 @@ npm run test:runtime -- --profile expected-production
 
 Human-readable explanation of what the profile is trying to model.
 
-Keep this concrete. Good descriptions mention the operational shape, not just
-the environment name.
+Keep this concrete. Good descriptions mention the operational shape, not just the environment name.
 
 ## `nodeWeights`
 
@@ -191,9 +198,7 @@ Controls how often delivery order is preserved.
 - `steadyPreserveOrderChance`
 - `chaoticPreserveOrderChance`
 
-Higher values mean cleaner delivery order.
-Lower values mean more shuffle and more opportunity for sequence and lateness
-issues.
+Higher values mean cleaner delivery order. Lower values mean more shuffle and more opportunity for sequence and lateness issues.
 
 ## `delays`
 
@@ -249,7 +254,7 @@ Use:
 
 Start from:
 
-- [expected-production.json](/abs/c:/dev/causal-order-dedupe/profiles/expected-production.json:1)
+- [expected-production.json](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/profiles/expected-production.json)
 
 ### Cross-node busy profile
 
@@ -259,8 +264,7 @@ Increase:
 - `chaoticCrossNodeChance`
 - `crossNodeParentChance`
 
-Keep delays moderate if you want to test dependency complexity without turning
-it into a latency problem.
+Keep delays moderate if you want to test dependency complexity without turning it into a latency problem.
 
 ### High-latency profile
 
@@ -271,8 +275,7 @@ Increase:
 - `lateSpikeMaxMs`
 - `extremeSpikeChance`
 
-This is useful when testing whether dedupe and the ordering engine can tolerate
-long tails.
+This is useful when testing whether dedupe and the ordering engine can tolerate long tails.
 
 ### Break-the-wire profile
 
@@ -285,7 +288,7 @@ If you want a partition-like stress shape:
 
 Start from:
 
-- [break-the-wire.json](/abs/c:/dev/causal-order-dedupe/profiles/break-the-wire.json:1)
+- [break-the-wire.json](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/profiles/break-the-wire.json)
 
 ## How To Create a New Profile
 
@@ -313,6 +316,20 @@ npm run summary:latest
 ```bash
 npm run summary:report
 ```
+
+If you want to keep the same workload profile but swap in a manual dedupe config, run something like:
+
+```bash
+npm run test:runtime -- --duration 10m --profile-file profiles/expected-production-3way-mesh.json --dedupe-config configs/dedupe-manual-heavy.json --run-name expected-production-3way-mesh-manual-420-840-10m-wallclock
+```
+
+One documented long-run reference point in this repo is:
+
+```bash
+npm run test:runtime -- --duration 8h --profile-file profiles/expected-production-3way-mesh.json --dedupe-preset standard --run-name expected-production-3way-mesh-standard-8h-wallclock
+```
+
+That `2026-06-09` wall-clock run completed with `PASS`, no error-level anomalies, stable memory near `60MB`, and strong duplicate suppression, so it is a useful baseline when you want to validate that a profile still looks production-like over a much longer duration.
 
 ## How To Tune Toward Your Real Requirements
 
@@ -346,8 +363,9 @@ In practice, these values should stay sane:
 - event rates should be positive
 - delay ranges should be non-negative and internally sensible
 
-If a profile is partially specified, the runtime merges it with the built-in
-default profile, so omitted fields still inherit baseline values.
+If a profile is partially specified, the runtime merges it with the built-in default profile, so omitted fields still inherit baseline values.
+
+If the runtime rejects a profile, see [operator-errors.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/operator-errors.md) for the exact operator-facing error patterns and what to change next.
 
 ## Recommended Workflow
 

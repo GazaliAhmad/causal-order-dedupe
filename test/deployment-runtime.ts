@@ -7,6 +7,7 @@ import {
   HELP_TEXT,
   buildConfig,
   buildRunArtifacts,
+  formatOperatorError,
   formatDuration,
   serializeConfig,
   type RuntimeArtifacts,
@@ -132,7 +133,7 @@ async function main(): Promise<void> {
     );
     log("all processes completed cleanly");
   } catch (error) {
-    log(error instanceof Error ? error.message : String(error));
+    log(formatOperatorError(error));
     cleanup("SIGTERM");
     await Promise.allSettled([collectorExitPromise, ...nodeExitPromises]);
     process.exitCode = 1;
@@ -211,6 +212,6 @@ function waitForExit(
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(formatOperatorError(error));
   process.exitCode = 1;
 });
