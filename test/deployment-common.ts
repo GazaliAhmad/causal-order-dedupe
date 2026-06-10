@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { EventEnvelope, HlcTimestamp } from "causal-order/types";
-import type { DedupePreset } from "../src/dedupe.js";
+import {
+  loadDedupeGatewayConfigFile,
+  type DedupeGatewayFileConfig,
+  type DedupePreset,
+} from "../src/dedupe.js";
 
 const PROFILE_DIR = resolve("profiles");
 
@@ -114,7 +118,7 @@ export interface RuntimeConfig {
   allowUnknownOrder: boolean;
   detectAnomalies: boolean;
   tieBreaker: string;
-  dedupePreset: DedupePreset;
+  dedupeConfig: DedupeGatewayFileConfig;
   nodeIds: string[];
   workloadProfile: WorkloadProfile;
   profileSource: string | null;
@@ -216,6 +220,7 @@ Options:
   --report-every <value>       Progress log interval in simulated time. Default: 30s
   --time-scale <n>             1 = realtime, 60 = one simulated minute per wall second
   --dedupe-preset <value>      standard | heavy-duplicates | high-latency | cross-node-busy. Default: standard
+  --dedupe-config <path>       JSON file with either a preset or explicit sliding/max windows
   --output <path>              Explicit summary JSON path
   --output-dir <path>          Base directory for run artifacts. Default: artifacts/runs
   --run-name <value>           Optional label appended to the run folder name
@@ -267,7 +272,7 @@ export function buildConfig(argv: string[]): RuntimeConfig | { help: true } {
       parsed.lateArrivalPolicy ?? DEFAULTS.lateArrivalPolicy,
     reportEveryMs: parsed.reportEveryMs ?? DEFAULTS.reportEveryMs,
     timeScale: parsed.timeScale ?? DEFAULTS.timeScale,
-    dedupePreset: parsed.dedupePreset ?? DEFAULTS.dedupePreset,
+    dedupeConfig: resolveRuntimeDedupeConfig(parsed),
     outputPath: parsed.outputPath ?? null,
     outputDir: parsed.outputDir ?? DEFAULTS.outputDir,
     runName: parsed.runName ?? null,
@@ -366,6 +371,10 @@ function parseArgs(argv: string[]) {
         );
         index += inlineValue === undefined ? 1 : 0;
         break;
+      case "--dedupe-config":
+        result.dedupeConfigPath = requireValue(rawKey, value);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
       case "--output":
         result.outputPath = requireValue(rawKey, value);
         index += inlineValue === undefined ? 1 : 0;
@@ -412,6 +421,22 @@ function requireValue(flag: string, value?: string): string {
     throw new Error(`Missing value for ${flag}`);
   }
   return value;
+}
+
+function resolveRuntimeDedupeConfig(
+  parsed: Record<string, any>,
+): DedupeGatewayFileConfig {
+  if (parsed.dedupeConfigPath && parsed.dedupePreset !== undefined) {
+    throw new Error("Choose either --dedupe-config or --dedupe-preset, not both");
+  }
+
+  if (parsed.dedupeConfigPath) {
+    return loadDedupeGatewayConfigFile(parsed.dedupeConfigPath);
+  }
+
+  return {
+    preset: parsed.dedupePreset ?? DEFAULTS.dedupePreset,
+  };
 }
 
 export function parseDurationToMs(input: string): bigint {
@@ -601,6 +626,14 @@ export function createSimulationClock(config: RuntimeConfig & { wallStartMs: num
   };
 }
 
+export function formatOperatorError(error: unknown): string {
+  if (error instanceof Error) {
+    return `Error: ${error.message}`;
+  }
+
+  return `Error: ${String(error)}`;
+}
+
 export async function sleepForSimulatedGap(
   gapMs: bigint,
   timeScale: number,
@@ -680,27 +713,39 @@ function resolveWorkloadProfile({
   profileFile: string | null;
 }): WorkloadProfile {
   if (profileFile) {
+    const resolvedProfilePath = resolve(profileFile);
+    const override = readJsonProfile(resolvedProfilePath);
+    validateWorkloadProfileOverride(override, resolvedProfilePath);
     return validateWorkloadProfile(
-      mergeWorkloadProfiles(
-        DEFAULT_WORKLOAD_PROFILE,
-        readJsonProfile(resolve(profileFile)),
-      ),
+      mergeWorkloadProfiles(DEFAULT_WORKLOAD_PROFILE, override),
+      resolvedProfilePath,
     );
   }
 
   if (!profileName || profileName === DEFAULT_WORKLOAD_PROFILE.name) {
-    return validateWorkloadProfile(DEFAULT_WORKLOAD_PROFILE);
+    return validateWorkloadProfile(
+      DEFAULT_WORKLOAD_PROFILE,
+      `built-in workload profile "${DEFAULT_WORKLOAD_PROFILE.name}"`,
+    );
   }
 
   const profilePath = resolve(PROFILE_DIR, `${profileName}.json`);
+  const override = readJsonProfile(profilePath);
+  validateWorkloadProfileOverride(override, profilePath);
   return validateWorkloadProfile(
-    mergeWorkloadProfiles(DEFAULT_WORKLOAD_PROFILE, readJsonProfile(profilePath)),
+    mergeWorkloadProfiles(DEFAULT_WORKLOAD_PROFILE, override),
+    profilePath,
   );
 }
 
-function readJsonProfile(path: string): Record<string, any> {
+function readJsonProfile(path: string): Record<string, unknown> {
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    return expectObjectRecord(
+      parsed,
+      path,
+      "workload profile root",
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Unable to read workload profile ${path}: ${message}`);
@@ -709,47 +754,403 @@ function readJsonProfile(path: string): Record<string, any> {
 
 function mergeWorkloadProfiles(
   base: WorkloadProfile,
-  override: Record<string, any>,
+  override: Record<string, unknown>,
 ): WorkloadProfile {
+  const nodeWeights =
+    override.nodeWeights && typeof override.nodeWeights === "object" && !Array.isArray(override.nodeWeights)
+      ? (override.nodeWeights as Record<string, unknown>)
+      : {};
+  const phaseRates =
+    override.phaseRates && typeof override.phaseRates === "object" && !Array.isArray(override.phaseRates)
+      ? (override.phaseRates as Record<string, unknown>)
+      : {};
+  const dependencies =
+    override.dependencies &&
+    typeof override.dependencies === "object" &&
+    !Array.isArray(override.dependencies)
+      ? (override.dependencies as Record<string, unknown>)
+      : {};
+  const duplicates =
+    override.duplicates && typeof override.duplicates === "object" && !Array.isArray(override.duplicates)
+      ? (override.duplicates as Record<string, unknown>)
+      : {};
+  const ordering =
+    override.ordering && typeof override.ordering === "object" && !Array.isArray(override.ordering)
+      ? (override.ordering as Record<string, unknown>)
+      : {};
+  const delays =
+    override.delays && typeof override.delays === "object" && !Array.isArray(override.delays)
+      ? (override.delays as Record<string, unknown>)
+      : {};
+  const steadyDelays =
+    delays.steady && typeof delays.steady === "object" && !Array.isArray(delays.steady)
+      ? (delays.steady as Record<string, unknown>)
+      : {};
+  const chaoticDelays =
+    delays.chaotic && typeof delays.chaotic === "object" && !Array.isArray(delays.chaotic)
+      ? (delays.chaotic as Record<string, unknown>)
+      : {};
+
   return {
     ...base,
     ...override,
     nodeWeights: {
       ...base.nodeWeights,
-      ...override.nodeWeights,
-    },
+      ...nodeWeights,
+    } as WorkloadProfile["nodeWeights"],
     phaseRates: {
       ...base.phaseRates,
-      ...override.phaseRates,
-    },
+      ...phaseRates,
+    } as WorkloadProfile["phaseRates"],
     dependencies: {
       ...base.dependencies,
-      ...override.dependencies,
-    },
+      ...dependencies,
+    } as WorkloadProfile["dependencies"],
     duplicates: {
       ...base.duplicates,
-      ...override.duplicates,
-    },
+      ...duplicates,
+    } as WorkloadProfile["duplicates"],
     ordering: {
       ...base.ordering,
-      ...override.ordering,
-    },
+      ...ordering,
+    } as WorkloadProfile["ordering"],
     delays: {
       ...base.delays,
-      ...override.delays,
+      ...delays,
       steady: {
         ...base.delays.steady,
-        ...override.delays?.steady,
-      },
+        ...steadyDelays,
+      } as WorkloadProfile["delays"]["steady"],
       chaotic: {
         ...base.delays.chaotic,
-        ...override.delays?.chaotic,
-      },
-    },
-  };
+        ...chaoticDelays,
+      } as WorkloadProfile["delays"]["chaotic"],
+    } as WorkloadProfile["delays"],
+  } as WorkloadProfile;
 }
 
-function validateWorkloadProfile(profile: WorkloadProfile): WorkloadProfile {
+function validateWorkloadProfileOverride(
+  override: Record<string, unknown>,
+  source: string,
+): void {
+  assertAllowedKeys(
+    override,
+    [
+      "name",
+      "description",
+      "nodeWeights",
+      "phaseRates",
+      "dependencies",
+      "duplicates",
+      "ordering",
+      "delays",
+    ],
+    source,
+    "workload profile root",
+  );
+
+  if ("name" in override) {
+    assertNonEmptyString(override.name, source, "name");
+  }
+
+  if ("description" in override) {
+    assertString(override.description, source, "description");
+  }
+
+  if ("nodeWeights" in override) {
+    const nodeWeights = expectObjectRecord(
+      override.nodeWeights,
+      source,
+      "nodeWeights",
+    );
+    for (const [nodeId, weight] of Object.entries(nodeWeights)) {
+      assertPositiveFiniteNumber(weight, source, `nodeWeights.${nodeId}`);
+    }
+  }
+
+  if ("phaseRates" in override) {
+    const phaseRates = expectObjectRecord(
+      override.phaseRates,
+      source,
+      "phaseRates",
+    );
+    assertAllowedKeys(
+      phaseRates,
+      [
+        "steadyEventsPerSecond",
+        "chaosMultiplier",
+        "chaosJitterMin",
+        "chaosJitterMax",
+      ],
+      source,
+      "phaseRates",
+    );
+
+    if ("steadyEventsPerSecond" in phaseRates) {
+      assertPositiveFiniteNumber(
+        phaseRates.steadyEventsPerSecond,
+        source,
+        "phaseRates.steadyEventsPerSecond",
+      );
+    }
+
+    if ("chaosMultiplier" in phaseRates) {
+      assertPositiveFiniteNumber(
+        phaseRates.chaosMultiplier,
+        source,
+        "phaseRates.chaosMultiplier",
+      );
+    }
+
+    if ("chaosJitterMin" in phaseRates) {
+      assertPositiveFiniteNumber(
+        phaseRates.chaosJitterMin,
+        source,
+        "phaseRates.chaosJitterMin",
+      );
+    }
+
+    if ("chaosJitterMax" in phaseRates) {
+      assertPositiveFiniteNumber(
+        phaseRates.chaosJitterMax,
+        source,
+        "phaseRates.chaosJitterMax",
+      );
+    }
+  }
+
+  if ("dependencies" in override) {
+    const dependencies = expectObjectRecord(
+      override.dependencies,
+      source,
+      "dependencies",
+    );
+    assertAllowedKeys(
+      dependencies,
+      [
+        "steadySameNodeChance",
+        "steadyCrossNodeChance",
+        "chaoticSameNodeChance",
+        "chaoticCrossNodeChance",
+        "sameNodeParentChance",
+        "crossNodeParentChance",
+      ],
+      source,
+      "dependencies",
+    );
+
+    for (const key of Object.keys(dependencies)) {
+      assertUnitInterval(
+        dependencies[key],
+        source,
+        `dependencies.${key}`,
+      );
+    }
+  }
+
+  if ("duplicates" in override) {
+    const duplicates = expectObjectRecord(
+      override.duplicates,
+      source,
+      "duplicates",
+    );
+    assertAllowedKeys(
+      duplicates,
+      ["steadyChance", "chaoticChance"],
+      source,
+      "duplicates",
+    );
+
+    for (const key of Object.keys(duplicates)) {
+      assertUnitInterval(
+        duplicates[key],
+        source,
+        `duplicates.${key}`,
+      );
+    }
+  }
+
+  if ("ordering" in override) {
+    const ordering = expectObjectRecord(
+      override.ordering,
+      source,
+      "ordering",
+    );
+    assertAllowedKeys(
+      ordering,
+      ["steadyPreserveOrderChance", "chaoticPreserveOrderChance"],
+      source,
+      "ordering",
+    );
+
+    for (const key of Object.keys(ordering)) {
+      assertUnitInterval(
+        ordering[key],
+        source,
+        `ordering.${key}`,
+      );
+    }
+  }
+
+  if ("delays" in override) {
+    const delays = expectObjectRecord(
+      override.delays,
+      source,
+      "delays",
+    );
+    assertAllowedKeys(
+      delays,
+      ["steady", "chaotic"],
+      source,
+      "delays",
+    );
+
+    if ("steady" in delays) {
+      const steady = expectObjectRecord(
+        delays.steady,
+        source,
+        "delays.steady",
+      );
+      assertAllowedKeys(
+        steady,
+        [
+          "baseMinMs",
+          "baseMaxMs",
+          "spikeChance",
+          "spikeMinMs",
+          "spikeMaxMs",
+        ],
+        source,
+        "delays.steady",
+      );
+
+      for (const key of ["baseMinMs", "baseMaxMs", "spikeMinMs", "spikeMaxMs"] as const) {
+        if (key in steady) {
+          assertNonNegativeFiniteNumber(
+            steady[key],
+            source,
+            `delays.steady.${key}`,
+          );
+        }
+      }
+
+      if ("spikeChance" in steady) {
+        assertUnitInterval(
+          steady.spikeChance,
+          source,
+          "delays.steady.spikeChance",
+        );
+      }
+    }
+
+    if ("chaotic" in delays) {
+      const chaotic = expectObjectRecord(
+        delays.chaotic,
+        source,
+        "delays.chaotic",
+      );
+      assertAllowedKeys(
+        chaotic,
+        [
+          "baseMinMs",
+          "baseMaxMs",
+          "slowSpikeChance",
+          "slowSpikeMinMs",
+          "slowSpikeMaxMs",
+          "lateSpikeChance",
+          "lateSpikeMinMs",
+          "lateSpikeMaxMs",
+          "extremeSpikeChance",
+          "extremeSpikeMinMs",
+          "extremeSpikeMaxMs",
+        ],
+        source,
+        "delays.chaotic",
+      );
+
+      for (const key of [
+        "baseMinMs",
+        "baseMaxMs",
+        "slowSpikeMinMs",
+        "slowSpikeMaxMs",
+        "lateSpikeMinMs",
+        "lateSpikeMaxMs",
+        "extremeSpikeMinMs",
+        "extremeSpikeMaxMs",
+      ] as const) {
+        if (key in chaotic) {
+          assertNonNegativeFiniteNumber(
+            chaotic[key],
+            source,
+            `delays.chaotic.${key}`,
+          );
+        }
+      }
+
+      for (const key of [
+        "slowSpikeChance",
+        "lateSpikeChance",
+        "extremeSpikeChance",
+      ] as const) {
+        if (key in chaotic) {
+          assertUnitInterval(
+            chaotic[key],
+            source,
+            `delays.chaotic.${key}`,
+          );
+        }
+      }
+    }
+  }
+}
+
+function validateWorkloadProfile(
+  profile: WorkloadProfile,
+  source: string,
+): WorkloadProfile {
+  assertNonEmptyString(profile.name, source, "name");
+  assertString(profile.description, source, "description");
+
+  const nodeWeightEntries = Object.entries(profile.nodeWeights);
+  if (nodeWeightEntries.length === 0) {
+    throw invalidWorkloadProfileError(
+      source,
+      "nodeWeights must define at least one node",
+    );
+  }
+
+  for (const [nodeId, weight] of nodeWeightEntries) {
+    assertPositiveFiniteNumber(weight, source, `nodeWeights.${nodeId}`);
+  }
+
+  assertPositiveFiniteNumber(
+    profile.phaseRates.steadyEventsPerSecond,
+    source,
+    "phaseRates.steadyEventsPerSecond",
+  );
+  assertPositiveFiniteNumber(
+    profile.phaseRates.chaosMultiplier,
+    source,
+    "phaseRates.chaosMultiplier",
+  );
+  assertPositiveFiniteNumber(
+    profile.phaseRates.chaosJitterMin,
+    source,
+    "phaseRates.chaosJitterMin",
+  );
+  assertPositiveFiniteNumber(
+    profile.phaseRates.chaosJitterMax,
+    source,
+    "phaseRates.chaosJitterMax",
+  );
+  assertMinLessThanOrEqual(
+    profile.phaseRates.chaosJitterMin,
+    profile.phaseRates.chaosJitterMax,
+    source,
+    "phaseRates.chaosJitterMin",
+    "phaseRates.chaosJitterMax",
+  );
+
   const bounded = [
     [
       "dependencies.steadySameNodeChance",
@@ -782,28 +1183,219 @@ function validateWorkloadProfile(profile: WorkloadProfile): WorkloadProfile {
   ] as Array<[string, number]>;
 
   for (const [label, value] of bounded) {
-    if (!Number.isFinite(value) || value < 0 || value > 1) {
-      throw new Error(`Workload profile field ${label} must be between 0 and 1`);
-    }
+    assertUnitInterval(value, source, label);
   }
 
-  if (
-    !Number.isFinite(profile.phaseRates.steadyEventsPerSecond) ||
-    profile.phaseRates.steadyEventsPerSecond <= 0
-  ) {
-    throw new Error(
-      "Workload profile phaseRates.steadyEventsPerSecond must be positive",
-    );
+  assertProbabilitySumAtMostOne(
+    profile.dependencies.steadySameNodeChance,
+    profile.dependencies.steadyCrossNodeChance,
+    source,
+    "dependencies.steadySameNodeChance",
+    "dependencies.steadyCrossNodeChance",
+  );
+  assertProbabilitySumAtMostOne(
+    profile.dependencies.chaoticSameNodeChance,
+    profile.dependencies.chaoticCrossNodeChance,
+    source,
+    "dependencies.chaoticSameNodeChance",
+    "dependencies.chaoticCrossNodeChance",
+  );
+
+  for (const [label, value] of [
+    ["delays.steady.baseMinMs", profile.delays.steady.baseMinMs],
+    ["delays.steady.baseMaxMs", profile.delays.steady.baseMaxMs],
+    ["delays.steady.spikeMinMs", profile.delays.steady.spikeMinMs],
+    ["delays.steady.spikeMaxMs", profile.delays.steady.spikeMaxMs],
+    ["delays.chaotic.baseMinMs", profile.delays.chaotic.baseMinMs],
+    ["delays.chaotic.baseMaxMs", profile.delays.chaotic.baseMaxMs],
+    ["delays.chaotic.slowSpikeMinMs", profile.delays.chaotic.slowSpikeMinMs],
+    ["delays.chaotic.slowSpikeMaxMs", profile.delays.chaotic.slowSpikeMaxMs],
+    ["delays.chaotic.lateSpikeMinMs", profile.delays.chaotic.lateSpikeMinMs],
+    ["delays.chaotic.lateSpikeMaxMs", profile.delays.chaotic.lateSpikeMaxMs],
+    [
+      "delays.chaotic.extremeSpikeMinMs",
+      profile.delays.chaotic.extremeSpikeMinMs,
+    ],
+    [
+      "delays.chaotic.extremeSpikeMaxMs",
+      profile.delays.chaotic.extremeSpikeMaxMs,
+    ],
+  ] as Array<[string, number]>) {
+    assertNonNegativeFiniteNumber(value, source, label);
   }
 
-  if (
-    !Number.isFinite(profile.phaseRates.chaosMultiplier) ||
-    profile.phaseRates.chaosMultiplier <= 0
-  ) {
-    throw new Error(
-      "Workload profile phaseRates.chaosMultiplier must be positive",
-    );
+  for (const [label, value] of [
+    ["delays.steady.spikeChance", profile.delays.steady.spikeChance],
+    ["delays.chaotic.slowSpikeChance", profile.delays.chaotic.slowSpikeChance],
+    ["delays.chaotic.lateSpikeChance", profile.delays.chaotic.lateSpikeChance],
+    [
+      "delays.chaotic.extremeSpikeChance",
+      profile.delays.chaotic.extremeSpikeChance,
+    ],
+  ] as Array<[string, number]>) {
+    assertUnitInterval(value, source, label);
   }
+
+  assertMinLessThanOrEqual(
+    profile.delays.steady.baseMinMs,
+    profile.delays.steady.baseMaxMs,
+    source,
+    "delays.steady.baseMinMs",
+    "delays.steady.baseMaxMs",
+  );
+  assertMinLessThanOrEqual(
+    profile.delays.steady.spikeMinMs,
+    profile.delays.steady.spikeMaxMs,
+    source,
+    "delays.steady.spikeMinMs",
+    "delays.steady.spikeMaxMs",
+  );
+  assertMinLessThanOrEqual(
+    profile.delays.chaotic.baseMinMs,
+    profile.delays.chaotic.baseMaxMs,
+    source,
+    "delays.chaotic.baseMinMs",
+    "delays.chaotic.baseMaxMs",
+  );
+  assertMinLessThanOrEqual(
+    profile.delays.chaotic.slowSpikeMinMs,
+    profile.delays.chaotic.slowSpikeMaxMs,
+    source,
+    "delays.chaotic.slowSpikeMinMs",
+    "delays.chaotic.slowSpikeMaxMs",
+  );
+  assertMinLessThanOrEqual(
+    profile.delays.chaotic.lateSpikeMinMs,
+    profile.delays.chaotic.lateSpikeMaxMs,
+    source,
+    "delays.chaotic.lateSpikeMinMs",
+    "delays.chaotic.lateSpikeMaxMs",
+  );
+  assertMinLessThanOrEqual(
+    profile.delays.chaotic.extremeSpikeMinMs,
+    profile.delays.chaotic.extremeSpikeMaxMs,
+    source,
+    "delays.chaotic.extremeSpikeMinMs",
+    "delays.chaotic.extremeSpikeMaxMs",
+  );
 
   return profile;
+}
+
+function expectObjectRecord(
+  value: unknown,
+  source: string,
+  label: string,
+): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw invalidWorkloadProfileError(source, `"${label}" must be a JSON object`);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function assertAllowedKeys(
+  record: Record<string, unknown>,
+  allowedKeys: string[],
+  source: string,
+  label: string,
+): void {
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(record)) {
+    if (!allowed.has(key)) {
+      const detail =
+        label === "workload profile root"
+          ? `unknown field "${key}"`
+          : `unknown field "${key}" under "${label}"`;
+      throw invalidWorkloadProfileError(source, detail);
+    }
+  }
+}
+
+function assertString(value: unknown, source: string, label: string): void {
+  if (typeof value !== "string") {
+    throw invalidWorkloadProfileError(source, `"${label}" must be a string`);
+  }
+}
+
+function assertNonEmptyString(value: unknown, source: string, label: string): void {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw invalidWorkloadProfileError(
+      source,
+      `"${label}" must be a non-empty string`,
+    );
+  }
+}
+
+function assertPositiveFiniteNumber(
+  value: unknown,
+  source: string,
+  label: string,
+): void {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw invalidWorkloadProfileError(
+      source,
+      `"${label}" must be a positive finite number`,
+    );
+  }
+}
+
+function assertNonNegativeFiniteNumber(
+  value: unknown,
+  source: string,
+  label: string,
+): void {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw invalidWorkloadProfileError(
+      source,
+      `"${label}" must be a non-negative finite number`,
+    );
+  }
+}
+
+function assertUnitInterval(
+  value: unknown,
+  source: string,
+  label: string,
+): void {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw invalidWorkloadProfileError(
+      source,
+      `"${label}" must be between 0 and 1`,
+    );
+  }
+}
+
+function assertMinLessThanOrEqual(
+  minValue: number,
+  maxValue: number,
+  source: string,
+  minLabel: string,
+  maxLabel: string,
+): void {
+  if (minValue > maxValue) {
+    throw invalidWorkloadProfileError(
+      source,
+      `"${minLabel}" cannot be greater than "${maxLabel}"`,
+    );
+  }
+}
+
+function assertProbabilitySumAtMostOne(
+  left: number,
+  right: number,
+  source: string,
+  leftLabel: string,
+  rightLabel: string,
+): void {
+  if (left + right > 1) {
+    throw invalidWorkloadProfileError(
+      source,
+      `"${leftLabel}" + "${rightLabel}" cannot be greater than 1`,
+    );
+  }
+}
+
+function invalidWorkloadProfileError(source: string, detail: string): Error {
+  return new Error(`Invalid workload profile ${source}: ${detail}`);
 }

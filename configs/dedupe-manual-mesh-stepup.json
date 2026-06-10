@@ -1,0 +1,6 @@
+{
+  "slidingWindowSeconds": 210,
+  "maxSlidingWindowSeconds": 420,
+  "autoCleanup": true,
+  "autoCleanupIntervalSeconds": 30
+}

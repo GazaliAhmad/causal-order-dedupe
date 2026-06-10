@@ -1,11 +1,15 @@
 import {
+  existsSync,
   mkdirSync,
+  rmSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const rootDir = resolve(".");
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const rootDir = findRepoRoot(scriptDir);
 const buildDir = resolve(rootDir, ".build");
 const distDir = resolve(rootDir, "publish-dist");
 const rootPackagePath = resolve(rootDir, "package.json");
@@ -31,12 +35,20 @@ const publishedPackage = {
     },
   },
   files: ["src/", "README.md", "LICENSE"],
+  scripts: {
+    prepack:
+      "node -e \"const { existsSync } = require('node:fs'); const { execFileSync } = require('node:child_process'); const script = '../.build/scripts/prepare-dist.js'; if (existsSync(script)) execFileSync(process.execPath, [script], { stdio: 'inherit' });\"",
+  },
   engines: rootPackage.engines,
   dependencies: rootPackage.dependencies,
 };
 
 mkdirSync(distDir, { recursive: true });
 mkdirSync(resolve(distDir, "src"), { recursive: true });
+removeIfExists(resolve(distDir, "guides"));
+removeIfExists(resolve(distDir, "COMPATIBILITY.md"));
+removeIfExists(resolve(distDir, "SECURITY.md"));
+removeIfExists(resolve(distDir, "CODE_OF_CONDUCT.md"));
 
 writeFileSync(
   resolve(distDir, "src", "dedupe.js"),
@@ -62,3 +74,34 @@ writeFileSync(
 );
 
 process.stdout.write(`Prepared publishable package in ${distDir}\n`);
+
+function findRepoRoot(startDir: string): string {
+  let currentDir = startDir;
+
+  while (true) {
+    const candidatePackagePath = resolve(currentDir, "package.json");
+    const candidateSourcePath = resolve(currentDir, "src", "dedupe.ts");
+
+    if (existsSync(candidatePackagePath) && existsSync(candidateSourcePath)) {
+      return currentDir;
+    }
+
+    const parentDir = resolve(currentDir, "..");
+    if (parentDir === currentDir) {
+      throw new Error(`Unable to locate repository root from ${startDir}`);
+    }
+
+    currentDir = parentDir;
+  }
+}
+
+function removeIfExists(path: string): void {
+  try {
+    rmSync(path, { recursive: true, force: true });
+  } catch (error: any) {
+    if (error && typeof error === "object" && "code" in error && error.code === "EPERM") {
+      return;
+    }
+    throw error;
+  }
+}

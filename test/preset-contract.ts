@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 
 import {
+  createDedupeGatewayFromConfigFile,
   DedupeGateway,
   type DedupeGatewayConfig,
   type DedupePreset,
+  loadDedupeGatewayConfigFile,
 } from "../src/dedupe.js";
 
 const PRESET_EXPECTATIONS: Record<
@@ -29,6 +34,7 @@ const PRESET_EXPECTATIONS: Record<
 };
 
 function run(): void {
+  const tempDir = mkdtempSync(resolve(tmpdir(), "dedupe-config-"));
   const supportedPresets = Object.keys(PRESET_EXPECTATIONS) as DedupePreset[];
 
   for (const preset of supportedPresets) {
@@ -76,7 +82,7 @@ function run(): void {
       new DedupeGateway({
         preset: "not-a-real-preset" as DedupePreset,
       }),
-    /Unsupported dedupe preset/,
+    /Invalid dedupe config: unsupported preset "not-a-real-preset"/,
   );
 
   assert.throws(
@@ -84,7 +90,7 @@ function run(): void {
       new DedupeGateway({
         slidingWindowSeconds: -1,
       }),
-    /slidingWindowSeconds must be a positive finite number/,
+    /Invalid dedupe config: slidingWindowSeconds must be a positive finite number/,
   );
 
   assert.throws(
@@ -93,7 +99,7 @@ function run(): void {
         slidingWindowSeconds: 400,
         maxSlidingWindowSeconds: 300,
       }),
-    /slidingWindowSeconds must be less than or equal to maxSlidingWindowSeconds/,
+    /Invalid dedupe config: slidingWindowSeconds cannot be greater than maxSlidingWindowSeconds/,
   );
 
   let nowMs = 0;
@@ -121,7 +127,115 @@ function run(): void {
   manualCleanupGateway.cleanup();
   assert.equal(manualCleanupGateway.filter({ id: "event-a" }), true);
 
-  console.log("preset contract checks passed");
+  const presetConfigPath = resolve(tempDir, "dedupe-preset.json");
+  writeFileSync(
+    presetConfigPath,
+    `${JSON.stringify(
+      {
+        preset: "cross-node-busy",
+        autoCleanup: false,
+        autoCleanupIntervalSeconds: 10,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  assert.deepEqual(loadDedupeGatewayConfigFile(presetConfigPath), {
+    preset: "cross-node-busy",
+    autoCleanup: false,
+    autoCleanupIntervalSeconds: 10,
+  });
+
+  const presetFileGateway = createDedupeGatewayFromConfigFile(presetConfigPath);
+  assert.equal(
+    presetFileGateway.currentWindowMs,
+    PRESET_EXPECTATIONS["cross-node-busy"].currentWindowMs,
+  );
+  assert.equal(
+    presetFileGateway.maxSlidingWindowMs,
+    PRESET_EXPECTATIONS["cross-node-busy"].maxSlidingWindowMs,
+  );
+
+  const manualConfigPath = resolve(tempDir, "dedupe-manual.json");
+  writeFileSync(
+    manualConfigPath,
+    `${JSON.stringify(
+      {
+        slidingWindowSeconds: 210,
+        maxSlidingWindowSeconds: 420,
+        autoCleanupIntervalSeconds: 15,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  assert.deepEqual(loadDedupeGatewayConfigFile(manualConfigPath), {
+    slidingWindowSeconds: 210,
+    maxSlidingWindowSeconds: 420,
+    autoCleanupIntervalSeconds: 15,
+  });
+
+  const manualFileGateway = createDedupeGatewayFromConfigFile(manualConfigPath);
+  assert.equal(manualFileGateway.currentWindowMs, 210_000n);
+  assert.equal(manualFileGateway.maxSlidingWindowMs, 420_000n);
+
+  const conflictingConfigPath = resolve(tempDir, "dedupe-conflict.json");
+  writeFileSync(
+    conflictingConfigPath,
+    `${JSON.stringify(
+      {
+        preset: "standard",
+        slidingWindowSeconds: 180,
+        maxSlidingWindowSeconds: 300,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  assert.throws(
+    () => loadDedupeGatewayConfigFile(conflictingConfigPath),
+    /Invalid dedupe config file .*: choose either "preset" or explicit "slidingWindowSeconds" and "maxSlidingWindowSeconds", not both/,
+  );
+
+  const partialConfigPath = resolve(tempDir, "dedupe-partial.json");
+  writeFileSync(
+    partialConfigPath,
+    `${JSON.stringify(
+      {
+        slidingWindowSeconds: 180,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  assert.throws(
+    () => loadDedupeGatewayConfigFile(partialConfigPath),
+    /Invalid dedupe config file .*: explicit window config requires both "slidingWindowSeconds" and "maxSlidingWindowSeconds"/,
+  );
+
+  const unknownFieldConfigPath = resolve(tempDir, "dedupe-unknown.json");
+  writeFileSync(
+    unknownFieldConfigPath,
+    `${JSON.stringify(
+      {
+        preset: "standard",
+        cleanupMode: "auto",
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  assert.throws(
+    () => loadDedupeGatewayConfigFile(unknownFieldConfigPath),
+    /Invalid dedupe config file .*: unknown field "cleanupMode"/,
+  );
+
+  console.log("preset and config-file contract checks passed");
 }
 
 run();

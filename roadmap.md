@@ -16,12 +16,18 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.0.4` is now implemented:
+- Version `1.0.5` is the current released line:
   - first-class preset support exists in `DedupeGateway`
   - default mode behaves as `standard`
-  - runtime profile tests can select a dedupe preset
-  - operator guides now cover tuning and workload-profile construction
-  - drop-in safeguards now include validation and automatic cleanup by default
+  - config-file driven setup now exists for dedupe configuration
+  - repo testing now keeps workload profiles under `profiles/` and manual dedupe config examples under `configs/`
+  - runtime profile tests can select a dedupe preset or a dedupe config file
+  - operator guides now cover tuning, workload-profile construction, and operator-facing error handling
+  - drop-in safeguards now include validation, automatic cleanup by default, and clear operator-facing configuration errors
+- Current repo-side operator workflow now also includes:
+  - a documented `8h` wall-clock baseline for `expected-production-3way-mesh` with `standard`
+  - a reusable `summary:compare` command for side-by-side run evaluation
+  - a three-way equilibrium model for reading runs through correctness, pressure, and backlog together
 
 ## v1.0.4
 
@@ -46,11 +52,16 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## v1.0.5
 
-- Support config-file driven setup using a simple format such as JSON.
-- Allow operators to choose either:
+Released scope:
+
+- Completed config-file driven setup using JSON helpers that load and validate dedupe options.
+- Completed operator choice between:
   - a preset name like `standard`
   - explicit values such as `slidingWindowSeconds` and `maxSlidingWindowSeconds`
-- Add clear validation errors for invalid or conflicting configuration.
+- Completed clear validation errors for invalid, partial, unknown, or conflicting configuration.
+- Completed a clearer repo-testing separation between workload profiles in `profiles/` and manual dedupe config examples in `configs/`.
+- Completed stricter workload-profile validation for invalid ranges, unsupported fields, and inconsistent probability settings.
+- Completed operator-facing error documentation under `guides/` so validation failures are easier to diagnose in practice.
 
 ## v1.0.6
 
@@ -61,6 +72,15 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - current cache size
   - active dedupe window
 - Use these metrics to support safer tuning rather than guesswork.
+- Extend the repo-side reporting workflow so longer wall-clock comparisons are easier to interpret quickly.
+- Completed groundwork already in the repo:
+  - `summary:compare` now gives side-by-side duplicate leakage, late ratio, queue peak, and memory comparisons
+  - operator guidance now treats run evaluation as a three-way equilibrium:
+    - correctness
+    - pressure
+    - backlog
+- Next useful extension:
+  - surface the same equilibrium framing from lightweight runtime stats in package-facing operator flows, not just repo harness reports
 
 ## v1.1.0
 
