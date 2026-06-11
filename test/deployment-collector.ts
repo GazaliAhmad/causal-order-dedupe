@@ -135,10 +135,10 @@ try {
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
   }
-  dedupeGate.destroy();
-  server.close();
   finalizeSummary();
   await appendHeartbeat("final");
+  dedupeGate.destroy();
+  server.close();
   await writeFile(
     config.artifacts.summaryPath,
     `${JSON.stringify(summary, null, 2)}\n`,
@@ -180,7 +180,6 @@ function handleMessage(socket: Socket, message: JsonRecord): void {
       }
 
       receiveEvent(deserializedEvent);
-      dedupeGate.cleanup();
       return;
     }
 
@@ -359,6 +358,7 @@ async function appendHeartbeat(kind: string): Promise<void> {
     lateAnomalies: summary.stream.byAnomalyType.late_arrival ?? 0,
     connectedNodes: Object.keys(summary.transport.connectedNodes).length,
     completedNodes: completedNodes.size,
+    dedupe: dedupeGate.getStats(),
     rssBytes: memory.rss,
     heapUsedBytes: memory.heapUsed,
     heapTotalBytes: memory.heapTotal,
@@ -455,6 +455,7 @@ function createSummary(): JsonRecord {
       byOrderBasis: {} as Record<string, number>,
       byConfidence: {} as Record<string, number>,
     },
+    dedupe: dedupeGate.getStats(),
     runtime: {
       nextReportAtMs: clock.simulationNowMs() + config.reportEveryMs,
     },
@@ -466,6 +467,7 @@ function createSummary(): JsonRecord {
 }
 
 function finalizeSummary(): void {
+  summary.dedupe = dedupeGate.getStats();
   const nodeStats = Object.values(summary.transport.nodeStats);
   summary.simulation = {
     generated: sumBy(nodeStats, "generated"),

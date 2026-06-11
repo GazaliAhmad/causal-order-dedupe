@@ -56,6 +56,13 @@ export interface DedupeGatewayFileConfig {
   autoCleanupIntervalSeconds?: number;
 }
 
+export interface DedupeGatewayStats {
+  acceptedEvents: number;
+  droppedDuplicates: number;
+  currentCacheSize: number;
+  activeWindowSeconds: number;
+}
+
 interface ResolvedDedupeGatewayConfig {
   maxSlidingWindowSeconds: number;
   slidingWindowSeconds: number;
@@ -83,9 +90,12 @@ export function createDedupeGatewayFromConfigFile(
 }
 
 export class DedupeGateway {
+  #minSlidingWindowMs: bigint;
   #maxSlidingWindowMs: bigint;
   #currentWindowMs: bigint;
   #cache: Map<string, bigint>;
+  #acceptedEvents: number;
+  #droppedDuplicates: number;
   #nowProvider: () => bigint | number;
   #autoCleanupEnabled: boolean;
   #autoCleanupIntervalMs: bigint;
@@ -94,13 +104,16 @@ export class DedupeGateway {
   constructor(config: DedupeGatewayConfig = {}) {
     const resolved = resolveGatewayConfig(config);
 
+    this.#minSlidingWindowMs = BigInt(
+      Math.floor(resolved.slidingWindowSeconds * 1000),
+    );
     this.#maxSlidingWindowMs = BigInt(
       Math.floor(resolved.maxSlidingWindowSeconds * 1000),
     );
-    this.#currentWindowMs = BigInt(
-      Math.floor(resolved.slidingWindowSeconds * 1000),
-    );
+    this.#currentWindowMs = this.#minSlidingWindowMs;
     this.#cache = new Map();
+    this.#acceptedEvents = 0;
+    this.#droppedDuplicates = 0;
     this.#nowProvider = resolved.nowProvider ?? (() => BigInt(Date.now()));
     this.#autoCleanupEnabled = resolved.autoCleanup;
     this.#autoCleanupIntervalMs = BigInt(
@@ -121,12 +134,25 @@ export class DedupeGateway {
     return this.#cache.size;
   }
 
+  getStats(): DedupeGatewayStats {
+    return {
+      acceptedEvents: this.#acceptedEvents,
+      droppedDuplicates: this.#droppedDuplicates,
+      currentCacheSize: this.#cache.size,
+      activeWindowSeconds: Number(this.#currentWindowMs) / 1000,
+    };
+  }
+
   updateWindow(seconds: number): void {
     if (!Number.isFinite(seconds) || seconds <= 0) {
       return;
     }
 
     let targetMs = BigInt(Math.floor(seconds * 1000));
+
+    if (targetMs < this.#minSlidingWindowMs) {
+      targetMs = this.#minSlidingWindowMs;
+    }
 
     if (targetMs > this.#maxSlidingWindowMs) {
       targetMs = this.#maxSlidingWindowMs;
@@ -137,6 +163,7 @@ export class DedupeGateway {
 
   filter(event?: DedupeEvent | null): boolean {
     if (!event) {
+      this.#acceptedEvents += 1;
       return true;
     }
 
@@ -146,6 +173,7 @@ export class DedupeGateway {
     }
 
     if (!identityKey) {
+      this.#acceptedEvents += 1;
       return true;
     }
 
@@ -153,10 +181,12 @@ export class DedupeGateway {
     this.#maybeAutoCleanup(currentTime);
 
     if (this.#cache.has(identityKey)) {
+      this.#droppedDuplicates += 1;
       return false;
     }
 
     this.#cache.set(identityKey, currentTime);
+    this.#acceptedEvents += 1;
     return true;
   }
 
@@ -166,6 +196,8 @@ export class DedupeGateway {
 
   destroy(): void {
     this.#cache.clear();
+    this.#acceptedEvents = 0;
+    this.#droppedDuplicates = 0;
     this.#lastCleanupAtMs = null;
   }
 

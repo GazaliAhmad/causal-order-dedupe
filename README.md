@@ -2,6 +2,12 @@
 
 Deduplication support for `causal-order` event streams.
 
+## Version Notice
+
+Published versions `1.0.2` through `1.0.5` are deprecated due to a config-adherence bug in runtime dedupe behavior. In those affected versions, the active dedupe window and cleanup behavior may not honor configured values correctly under runtime conditions.
+
+Use `1.0.6` or later.
+
 ## Relationship to [causal-order](https://www.npmjs.com/package/causal-order)
 
 `@causal-order/dedupe` is an extension package for [`causal-order`](https://www.npmjs.com/package/causal-order).
@@ -51,6 +57,9 @@ const dedupe = new DedupeGateway({
 if (dedupe.filter(event)) {
   // forward event into causal-order
 }
+
+const stats = dedupe.getStats();
+console.log(stats);
 
 // optional when you want tighter manual control
 dedupe.cleanup();
@@ -104,6 +113,23 @@ Returns:
 
 Adjusts the active dedupe window, capped by `maxSlidingWindowSeconds`.
 
+### `getStats()`
+
+Returns a lightweight runtime snapshot:
+
+- `acceptedEvents`: total events accepted by this gateway instance
+- `droppedDuplicates`: total duplicate events rejected by this gateway instance
+- `currentCacheSize`: number of identities currently retained in the dedupe cache
+- `activeWindowSeconds`: current active dedupe window in seconds
+
+The counters are lifetime counts for the current gateway instance. The cache size and active window are current snapshot values.
+
+In practice, operators can read these values as:
+
+- rising `droppedDuplicates` means the gateway is actively catching repeated deliveries
+- rising `currentCacheSize` means the gateway is retaining more dedupe state
+- a changed `activeWindowSeconds` confirms the gateway is running with a different active window than before
+
 ### `cleanup()`
 
 Evicts cached identities older than the current sliding window.
@@ -112,4 +138,4 @@ This is optional for most drop-in use because automatic cleanup is enabled by de
 
 ### `destroy()`
 
-Clears the in-memory cache.
+Clears the in-memory cache and resets runtime stats for that gateway instance.

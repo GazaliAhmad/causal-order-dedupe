@@ -16,7 +16,7 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.0.5` is the current released line:
+- Version `1.0.6` is the current working fix line:
   - first-class preset support exists in `DedupeGateway`
   - default mode behaves as `standard`
   - config-file driven setup now exists for dedupe configuration
@@ -24,10 +24,20 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - runtime profile tests can select a dedupe preset or a dedupe config file
   - operator guides now cover tuning, workload-profile construction, and operator-facing error handling
   - drop-in safeguards now include validation, automatic cleanup by default, and clear operator-facing configuration errors
+  - repo-side run comparison now includes a reusable `summary:compare` command
+  - lightweight runtime stats now exist through `DedupeGateway#getStats()`
+  - fresh deployment-style runtime artifacts now persist dedupe stats
 - Current repo-side operator workflow now also includes:
-  - a documented `8h` wall-clock baseline for `expected-production-3way-mesh` with `standard`
-  - a reusable `summary:compare` command for side-by-side run evaluation
   - a three-way equilibrium model for reading runs through correctness, pressure, and backlog together
+  - lightweight package-facing runtime stats through `DedupeGateway#getStats()`
+  - persisted dedupe stats in fresh deployment-style runtime artifacts and reports
+  - config-adherence checks that can invalidate a run when the live dedupe behavior drifts below the configured floor
+  - wall-clock runtime results should be treated as baseline-worthy only when they come from the fixed dedupe implementation
+  - tracked sanitized inspection snapshots under `test-artifects/` for the validated `8h` mesh baseline and comparison
+  - a now-validated `expected-production-3way-mesh` operator conclusion: `standard` is the cleaner default baseline, `heavy-duplicates` is a situational alternate, and manual tuning is fallback-only rather than the expected next step for that profile
+
+---
+## *History*
 
 ## v1.0.4
 
@@ -61,26 +71,40 @@ Released scope:
 - Completed clear validation errors for invalid, partial, unknown, or conflicting configuration.
 - Completed a clearer repo-testing separation between workload profiles in `profiles/` and manual dedupe config examples in `configs/`.
 - Completed stricter workload-profile validation for invalid ranges, unsupported fields, and inconsistent probability settings.
+- Completed a dedicated runtime-config contract path for validation failures across dedupe config and workload profiles.
 - Completed operator-facing error documentation under `guides/` so validation failures are easier to diagnose in practice.
+- Completed package-facing deployment and dedupe-config authoring guides so setup is documented separately from repo workload testing.
+- Completed baseline project docs for compatibility, security, and code-of-conduct expectations.
 
 ## v1.0.6
 
-- Add lightweight runtime stats so operators can evaluate whether a chosen preset is working well.
-- Candidate stats:
+- Completed lightweight runtime stats so operators can evaluate whether a chosen preset is working well.
+- Exposed stats:
   - accepted events
   - dropped duplicates
   - current cache size
   - active dedupe window
-- Use these metrics to support safer tuning rather than guesswork.
-- Extend the repo-side reporting workflow so longer wall-clock comparisons are easier to interpret quickly.
-- Completed groundwork already in the repo:
-  - `summary:compare` now gives side-by-side duplicate leakage, late ratio, queue peak, and memory comparisons
-  - operator guidance now treats run evaluation as a three-way equilibrium:
-    - correctness
-    - pressure
-    - backlog
-- Next useful extension:
-  - surface the same equilibrium framing from lightweight runtime stats in package-facing operator flows, not just repo harness reports
+- Completed a public snapshot API through `DedupeGateway#getStats()`.
+- Completed README and deployment-guide coverage for interpreting these metrics in practice.
+- Completed runtime artifact persistence for fresh deployment-style runs:
+  - `summary.json` now includes a `dedupe` section
+  - `heartbeats.ndjson` now includes per-snapshot dedupe stats
+  - `summary:report` now prints dedupe stats directly
+- These metrics now support safer tuning rather than guesswork.
+- Fixed runtime config-adherence so the active dedupe window now respects the configured floor and the runtime harness now honors cleanup settings from config files.
+- Established that published versions `1.0.2` through `1.0.5` are flawed for config-faithful runtime tuning and should be deprecated in npm.
+- Future wall-clock baseline and comparison results should be written only from the fixed dedupe line.
+- Completed package-facing equilibrium framing in deployment guidance as a lightweight interpretation aid.
+- Repo-side operator guidance continues to treat run evaluation as a three-way equilibrium:
+  - correctness
+  - pressure
+  - backlog
+- Completed config-valid `8h` wall-clock validation for `expected-production-3way-mesh` with both `standard` and `heavy-duplicates`.
+- Completed a trustworthy mesh baseline conclusion:
+  - `standard` remains the cleaner default baseline
+  - `heavy-duplicates` is healthy, but not a meaningful enough win to replace `standard`
+  - manual raw tuning is not required for that profile from current evidence
+- Completed tracked sanitized evidence snapshots under `test-artifects/` so readers can inspect the `8h` baseline and comparison without checking in full raw local run directories.
 
 ## v1.1.0
 
@@ -97,3 +121,4 @@ Released scope:
 - Bring the local `profiles/` harness and operator-facing package presets closer together so testing language matches deployment language.
 - Publish a short operator guide for choosing presets in practice.
 - Revisit preset defaults once real-world deployment data becomes available.
+- Keep manual raw timing as an escape hatch, but continue to prefer config-valid preset outcomes over hand-tuned windows when the validated workload evidence is already clean.

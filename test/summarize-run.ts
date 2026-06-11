@@ -19,9 +19,10 @@ function main(): void {
     .then(async (summaryPath) => {
       const summary = JSON.parse(await readFile(summaryPath, "utf8")) as JsonRecord;
       const runDir = resolve(summaryPath, "..");
+      const runtimeConfig = await loadOptionalJson(resolve(runDir, "run-config.json"));
       const heartbeats = await loadNdjson(resolve(runDir, "heartbeats.ndjson"));
       const lifecycle = await loadNdjson(resolve(runDir, "lifecycle.ndjson"));
-      console.log(buildReport(runDir, summary, heartbeats, lifecycle));
+      console.log(buildReport(runDir, summary, runtimeConfig, heartbeats, lifecycle));
     })
     .catch((error) => {
       console.error(error instanceof Error ? error.message : String(error));
@@ -98,9 +99,18 @@ async function loadNdjson(path: string): Promise<JsonRecord[]> {
   return rows;
 }
 
+async function loadOptionalJson(path: string): Promise<JsonRecord | null> {
+  if (!existsSync(path)) {
+    return null;
+  }
+
+  return JSON.parse(await readFile(path, "utf8")) as JsonRecord;
+}
+
 function buildReport(
   runDir: string,
   summary: JsonRecord,
+  runtimeConfig: JsonRecord | null,
   heartbeats: JsonRecord[],
   lifecycle: JsonRecord[],
 ): string {
@@ -110,6 +120,9 @@ function buildReport(
   const stream = summary.stream ?? {};
   const simulation = summary.simulation ?? {};
   const transport = summary.transport ?? {};
+  const dedupe = summary.dedupe ?? {};
+  const hasDedupeTelemetry = Object.keys(dedupe).length > 0;
+  const dedupeWindow = resolveDedupeWindow(summary, runtimeConfig);
 
   const status = outcome.status ?? "unknown";
   const model = config.model ?? "single_process";
@@ -139,6 +152,10 @@ function buildReport(
       (1024 * 1024);
     lastRssMb = Number(heartbeats.at(-1)?.rssBytes ?? 0) / (1024 * 1024);
   }
+  const peakDedupeCacheSize = Math.max(
+    Number(dedupe.currentCacheSize ?? 0),
+    ...heartbeats.map((row) => Number(row.dedupe?.currentCacheSize ?? 0)),
+  );
 
   const { assessment, reasons } = assessRun({
     status,
@@ -149,16 +166,25 @@ function buildReport(
     maxQueue,
     delivered,
     ordered,
+    dedupeWindow,
   });
   const outcomeLine = describeOutcome({ status, assessment });
-  const verdict = deriveVerdict({ status, assessment });
+  const verdict = deriveVerdict({ status, assessment, dedupeWindow });
   const realWorldMeaning = describeRealWorldMeaning({
     verdict,
     late,
     errors,
     maxQueue,
+    hasDedupeTelemetry,
+    dedupeWindow,
   });
-  const likelyOperatorAction = describeOperatorAction({ verdict, errors, late });
+  const likelyOperatorAction = describeOperatorAction({
+    verdict,
+    errors,
+    late,
+    hasDedupeTelemetry,
+    dedupeWindow,
+  });
 
   const lines: string[] = [];
   lines.push(`Run: ${runDir.split(/[\\/]/).at(-1) ?? runDir}`);
@@ -177,6 +203,38 @@ function buildReport(
     `Anomalies: total=${anomalies} | late=${late} | warn=${warnings} | error=${errors}`,
   );
   lines.push(`Queue: max=${maxQueue}`);
+  if (Object.keys(dedupe).length > 0) {
+    lines.push("Validation:");
+    for (const line of buildDedupeValidationLines({
+      dedupe,
+      dedupeWindow,
+      generated,
+      delivered,
+      duplicatesInjected: Number(simulation.duplicatesInjected ?? 0),
+      peakDedupeCacheSize,
+    })) {
+      lines.push(`  - ${line}`);
+    }
+
+    const dedupeParts = [
+      `accepted=${Number(dedupe.acceptedEvents ?? 0)}`,
+      `dropped=${Number(dedupe.droppedDuplicates ?? 0)}`,
+      `cache=${Number(dedupe.currentCacheSize ?? 0)}`,
+      `window=${Number(dedupe.activeWindowSeconds ?? 0)}s`,
+    ];
+    if (dedupeWindow.configuredFloorSeconds !== null) {
+      dedupeParts.push(`configured_floor=${dedupeWindow.configuredFloorSeconds}s`);
+    }
+    if (dedupeWindow.configuredMaxSeconds !== null) {
+      dedupeParts.push(`configured_max=${dedupeWindow.configuredMaxSeconds}s`);
+    }
+    if (dedupeWindow.violatesConfiguredFloor) {
+      dedupeParts.push("config_drift=below_floor");
+    }
+    lines.push(
+      `Dedupe: ${dedupeParts.join(" | ")}`,
+    );
+  }
 
   if (peakRssMb !== null && lastRssMb !== null) {
     lines.push(`Memory: last_rss=${lastRssMb.toFixed(1)}MB | peak_rss=${peakRssMb.toFixed(1)}MB`);
@@ -228,6 +286,128 @@ function buildReport(
   return lines.join("\n");
 }
 
+function resolveDedupeWindow(
+  summary: JsonRecord,
+  runtimeConfig: JsonRecord | null,
+): {
+  activeWindowSeconds: number | null;
+  configuredFloorSeconds: number | null;
+  configuredMaxSeconds: number | null;
+  violatesConfiguredFloor: boolean;
+} {
+  const dedupe = summary.dedupe ?? {};
+  const dedupeConfig =
+    summary.config?.dedupeConfig ?? runtimeConfig?.dedupeConfig ?? {};
+  const activeWindowSeconds = toFiniteNumberOrNull(dedupe.activeWindowSeconds);
+  const configuredFloorSeconds = toFiniteNumberOrNull(dedupeConfig.slidingWindowSeconds);
+  const configuredMaxSeconds = toFiniteNumberOrNull(
+    dedupeConfig.maxSlidingWindowSeconds,
+  );
+
+  return {
+    activeWindowSeconds,
+    configuredFloorSeconds,
+    configuredMaxSeconds,
+    violatesConfiguredFloor:
+      activeWindowSeconds !== null &&
+      configuredFloorSeconds !== null &&
+      activeWindowSeconds + 1e-9 < configuredFloorSeconds,
+  };
+}
+
+function toFiniteNumberOrNull(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function buildDedupeValidationLines(input: {
+  dedupe: JsonRecord;
+  dedupeWindow: {
+    activeWindowSeconds: number | null;
+    configuredFloorSeconds: number | null;
+    configuredMaxSeconds: number | null;
+    violatesConfiguredFloor: boolean;
+  };
+  generated: number;
+  delivered: number;
+  duplicatesInjected: number;
+  peakDedupeCacheSize: number;
+}): string[] {
+  const accepted = Number(input.dedupe.acceptedEvents ?? 0);
+  const dropped = Number(input.dedupe.droppedDuplicates ?? 0);
+  const currentCacheSize = Number(input.dedupe.currentCacheSize ?? 0);
+  const pressureRatio = accepted > 0 ? input.peakDedupeCacheSize / accepted : 0;
+
+  const lines: string[] = [];
+
+  if (input.dedupeWindow.violatesConfiguredFloor) {
+    lines.push(
+      `dedupe config: invalid (active window ${input.dedupeWindow.activeWindowSeconds}s below configured floor ${input.dedupeWindow.configuredFloorSeconds}s)`,
+    );
+  } else if (
+    input.dedupeWindow.activeWindowSeconds !== null &&
+    input.dedupeWindow.configuredFloorSeconds !== null
+  ) {
+    const upperBound =
+      input.dedupeWindow.configuredMaxSeconds === null
+        ? "unbounded"
+        : `${input.dedupeWindow.configuredMaxSeconds}s`;
+    lines.push(
+      `dedupe config: ok (active window ${input.dedupeWindow.activeWindowSeconds}s within configured ${input.dedupeWindow.configuredFloorSeconds}s..${upperBound})`,
+    );
+  } else if (input.dedupeWindow.activeWindowSeconds !== null) {
+    lines.push(
+      `dedupe config: observed (active window ${input.dedupeWindow.activeWindowSeconds}s)`,
+    );
+  }
+
+  if (accepted === 0 && input.generated > 0) {
+    lines.push("dedupe traffic: suspicious (generated load was present, but no events were accepted)");
+  } else if (accepted === 0) {
+    lines.push("dedupe traffic: suspicious (no accepted events were recorded)");
+  } else if (input.delivered > 0 && accepted !== input.delivered) {
+    lines.push(
+      `dedupe traffic: suspicious (accepted ${accepted} diverged from delivered ${input.delivered})`,
+    );
+  } else {
+    lines.push(`dedupe traffic: ok (accepted ${accepted} events)`);
+  }
+
+  if (input.duplicatesInjected > 0 && dropped === 0) {
+    lines.push(
+      `dedupe suppression: warning (${input.duplicatesInjected} duplicates were injected, but none were dropped)`,
+    );
+  } else if (input.duplicatesInjected > 0) {
+    lines.push(
+      `dedupe suppression: active (dropped ${dropped} duplicates with ${input.duplicatesInjected} injected)`,
+    );
+  } else if (dropped > 0) {
+    lines.push(
+      `dedupe suppression: active (dropped ${dropped} duplicates without injected-load metadata)`,
+    );
+  } else {
+    lines.push("dedupe suppression: not exercised (no dropped duplicates were recorded)");
+  }
+
+  if (accepted === 0) {
+    lines.push(`dedupe pressure: unknown (cache=${currentCacheSize}, peak=${input.peakDedupeCacheSize})`);
+  } else if (pressureRatio >= 0.01) {
+    lines.push(
+      `dedupe pressure: warning (peak cache ${input.peakDedupeCacheSize} ids, ${formatPercent(pressureRatio)} of accepted volume)`,
+    );
+  } else if (pressureRatio >= 0.002) {
+    lines.push(
+      `dedupe pressure: noticeable (peak cache ${input.peakDedupeCacheSize} ids, ${formatPercent(pressureRatio)} of accepted volume)`,
+    );
+  } else {
+    lines.push(
+      `dedupe pressure: controlled (cache=${currentCacheSize}, peak=${input.peakDedupeCacheSize})`,
+    );
+  }
+
+  return lines;
+}
+
 function assessRun(input: {
   status: string;
   errors: number;
@@ -237,12 +417,24 @@ function assessRun(input: {
   maxQueue: number;
   delivered: number;
   ordered: number;
+  dedupeWindow: {
+    activeWindowSeconds: number | null;
+    configuredFloorSeconds: number | null;
+    configuredMaxSeconds: number | null;
+    violatesConfiguredFloor: boolean;
+  };
 }): { assessment: string; reasons: string[] } {
   const reasons: string[] = [];
 
   if (input.status === "failed") {
     reasons.push("the run ended with a failed status");
     return { assessment: "failed", reasons };
+  }
+
+  if (input.dedupeWindow.violatesConfiguredFloor) {
+    reasons.push(
+      `active dedupe window fell below the configured floor (${input.dedupeWindow.activeWindowSeconds}s < ${input.dedupeWindow.configuredFloorSeconds}s)`,
+    );
   }
 
   if (input.errors > 0) {
@@ -296,6 +488,9 @@ function assessRun(input: {
   }
 
   if (input.status === "completed") {
+    if (input.dedupeWindow.violatesConfiguredFloor) {
+      return { assessment: "invalid", reasons };
+    }
     return { assessment: "degraded", reasons };
   }
 
@@ -315,15 +510,30 @@ function describeOutcome(input: { status: string; assessment: string }): string 
   if (input.status === "completed" && input.assessment === "degraded") {
     return "survived but stressed";
   }
+  if (input.status === "completed" && input.assessment === "invalid") {
+    return "completed, but not under the configured dedupe window";
+  }
   return `${input.status} (${input.assessment})`;
 }
 
-function deriveVerdict(input: { status: string; assessment: string }): string {
+function deriveVerdict(input: {
+  status: string;
+  assessment: string;
+  dedupeWindow: {
+    activeWindowSeconds: number | null;
+    configuredFloorSeconds: number | null;
+    configuredMaxSeconds: number | null;
+    violatesConfiguredFloor: boolean;
+  };
+}): string {
   if (input.status === "failed") {
     return "FAIL";
   }
   if (input.status === "interrupted") {
     return "INTERRUPTED";
+  }
+  if (input.status === "completed" && input.dedupeWindow.violatesConfiguredFloor) {
+    return "INVALID CONFIG";
   }
   if (input.status === "completed" && input.assessment === "healthy") {
     return "PASS";
@@ -374,19 +584,44 @@ function describeRealWorldMeaning(input: {
   late: number;
   errors: number;
   maxQueue: number;
+  hasDedupeTelemetry: boolean;
+  dedupeWindow: {
+    activeWindowSeconds: number | null;
+    configuredFloorSeconds: number | null;
+    configuredMaxSeconds: number | null;
+    violatesConfiguredFloor: boolean;
+  };
 }): string[] {
-  if (input.verdict === "PASS") {
+  if (input.verdict === "INVALID CONFIG") {
     return [
-      "the runtime stayed up and the run looked operationally healthy",
-      "the ordering layer handled the simulated workload without notable distress",
+      "the runtime completed, but the validation signals show the dedupe layer did not stay within the requested config",
+      "the observed dedupe window drifted below the configured floor, so this run is not a trustworthy tuning result",
+      "duplicate leakage and anomaly outcomes may reflect the drifted live window rather than the intended manual setting",
     ];
   }
 
-  if (input.verdict === "PASS WITH STRESS") {
+  if (input.verdict === "PASS") {
     const meaning = [
-      "the runtime stayed up and continued processing, but the workload exposed operational strain",
-      "this is closer to a degraded production period than a clean healthy one",
+      "the runtime stayed up and the run looked operationally healthy",
+      "the ordering layer handled the simulated workload without notable distress",
     ];
+    if (input.hasDedupeTelemetry && !input.dedupeWindow.violatesConfiguredFloor) {
+      meaning.unshift("the validation signals stayed within the configured dedupe behavior");
+    }
+    return meaning;
+  }
+
+  if (input.verdict === "PASS WITH STRESS") {
+    const meaning = input.hasDedupeTelemetry && !input.dedupeWindow.violatesConfiguredFloor
+      ? [
+          "the validation signals stayed within the configured dedupe behavior, so the degraded reading reflects workload strain rather than config drift",
+          "the runtime stayed up and continued processing, but the workload exposed operational strain",
+          "this is closer to a degraded production period than a clean healthy one",
+        ]
+      : [
+          "the runtime stayed up and continued processing, but the workload exposed operational strain",
+          "this is closer to a degraded production period than a clean healthy one",
+        ];
     if (input.errors > 0) {
       meaning.push("error-level anomalies suggest something would deserve operator review");
     }
@@ -417,18 +652,46 @@ function describeOperatorAction(input: {
   verdict: string;
   errors: number;
   late: number;
+  hasDedupeTelemetry: boolean;
+  dedupeWindow: {
+    activeWindowSeconds: number | null;
+    configuredFloorSeconds: number | null;
+    configuredMaxSeconds: number | null;
+    violatesConfiguredFloor: boolean;
+  };
 }): string[] {
+  if (input.verdict === "INVALID CONFIG") {
+    return [
+      "treat the validation failure as the primary issue and rerun after fixing the dedupe window enforcement",
+      "compare configured floor versus observed active window before trusting any workload interpretation",
+      "do not tighten the dedupe window based on this result because the runtime already drifted below the requested floor",
+    ];
+  }
+
   if (input.verdict === "PASS") {
+    if (input.hasDedupeTelemetry) {
+      return [
+        "record the run as healthy only after confirming the Validation section stayed within the configured dedupe behavior",
+        "keep the summary for baseline comparison",
+      ];
+    }
     return ["record the run as healthy and keep the summary for baseline comparison"];
   }
 
   if (input.verdict === "PASS WITH STRESS") {
-    const actions = [
-      "inspect anomaly types in anomalies.ndjson before treating the profile as production-ready",
-      "compare this run against cleaner baseline runs to see whether the stress level is expected",
-    ];
+    const actions = input.hasDedupeTelemetry
+      ? [
+          "start with the Validation section so you confirm the dedupe config, traffic, suppression, and pressure signals before reading the anomaly totals",
+          "inspect anomaly types in anomalies.ndjson before treating the profile as production-ready",
+          "compare this run against cleaner baseline runs to see whether the stress level is expected",
+        ]
+      : [
+          "this run lacks dedupe validation telemetry, so avoid treating it as a final tuning baseline",
+          "inspect anomaly types in anomalies.ndjson before treating the profile as production-ready",
+          "compare this run against cleaner baseline runs to see whether the stress level is expected",
+        ];
     if (input.errors > 0) {
-      actions.push("focus first on the error-level anomalies because they drove the degraded verdict");
+      actions.push("focus next on the error-level anomalies because they drove the degraded verdict");
     }
     if (input.late > 0) {
       actions.push("review lateness and queue settings to decide whether the profile is too harsh or the runtime is too tight");
@@ -467,6 +730,14 @@ function formatDurationMs(milliseconds: number): string {
     return `${minutes}m${seconds.toString().padStart(2, "0")}s`;
   }
   return `${seconds}s`;
+}
+
+function formatPercent(value: number): string {
+  return value.toLocaleString(undefined, {
+    style: "percent",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 main();

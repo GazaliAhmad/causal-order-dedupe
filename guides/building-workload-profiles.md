@@ -323,13 +323,18 @@ If you want to keep the same workload profile but swap in a manual dedupe config
 npm run test:runtime -- --duration 10m --profile-file profiles/expected-production-3way-mesh.json --dedupe-config configs/dedupe-manual-heavy.json --run-name expected-production-3way-mesh-manual-420-840-10m-wallclock
 ```
 
-One documented long-run reference point in this repo is:
+One validated long-run reference point in this repo is:
 
 ```bash
-npm run test:runtime -- --duration 8h --profile-file profiles/expected-production-3way-mesh.json --dedupe-preset standard --run-name expected-production-3way-mesh-standard-8h-wallclock
+npm run test:runtime -- --duration 8h --profile-file profiles/expected-production-3way-mesh.json --dedupe-preset standard --run-name expected-production-3way-mesh-standard-8h-postfix-baseline
 ```
 
-That `2026-06-09` wall-clock run completed with `PASS`, no error-level anomalies, stable memory near `60MB`, and strong duplicate suppression, so it is a useful baseline when you want to validate that a profile still looks production-like over a much longer duration.
+That `2026-06-10` wall-clock run completed with `PASS`, `Status: completed`, `Assessment: healthy`, `0` error-level anomalies, `activeWindowSeconds: 180s`, and duplicate suppression that matched the injected duplicate count exactly.
+Use it as a baseline only because the dedupe validation also stayed consistent with the configured `standard` preset.
+Readers who want the tracked evidence can inspect [test-artifects/expected-production-3way-mesh-standard-8h-postfix-baseline](../test-artifects/expected-production-3way-mesh-standard-8h-postfix-baseline).
+
+The matching `heavy-duplicates` `8h` comparison on `2026-06-10` to `2026-06-11` also completed with `PASS` and honored its configured `300s` window, but the comparison did not reveal a meaningful enough improvement to displace `standard` as the baseline for this profile.
+The tracked comparison snapshot is available at [test-artifects/comparison.md](../test-artifects/comparison.md).
 
 ## How To Tune Toward Your Real Requirements
 

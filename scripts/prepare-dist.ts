@@ -26,6 +26,7 @@ const publishedPackage = {
   license: rootPackage.license,
   repository: rootPackage.repository,
   type: rootPackage.type,
+  sideEffects: rootPackage.sideEffects ?? false,
   main: "./src/dedupe.js",
   types: "./src/dedupe.d.ts",
   exports: {

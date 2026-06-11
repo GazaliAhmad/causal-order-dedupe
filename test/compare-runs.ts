@@ -30,6 +30,15 @@ interface RunMetrics {
   wallElapsedMs: number;
   peakRssMb: number | null;
   lastRssMb: number | null;
+  activeWindowSeconds: number | null;
+  configuredFloorSeconds: number | null;
+  configuredMaxSeconds: number | null;
+  violatesConfiguredFloor: boolean;
+  hasDedupeTelemetry: boolean;
+  acceptedEvents: number;
+  droppedDuplicates: number;
+  currentCacheSize: number;
+  peakDedupeCacheSize: number;
 }
 
 function main(): void {
@@ -131,6 +140,7 @@ async function loadRunMetrics(summaryPath: string): Promise<RunMetrics> {
   const stream = summary.stream ?? {};
   const simulation = summary.simulation ?? {};
   const transport = summary.transport ?? {};
+  const dedupe = summary.dedupe ?? {};
   const delivered = Number(
     simulation.delivered ?? transport.receivedEvents ?? simulation.sent ?? 0,
   );
@@ -157,8 +167,13 @@ async function loadRunMetrics(summaryPath: string): Promise<RunMetrics> {
       (1024 * 1024);
     lastRssMb = Number(heartbeats.at(-1)?.rssBytes ?? 0) / (1024 * 1024);
   }
+  const peakDedupeCacheSize = Math.max(
+    Number(dedupe.currentCacheSize ?? 0),
+    ...heartbeats.map((row) => Number(row.dedupe?.currentCacheSize ?? 0)),
+  );
 
   const status = String(outcome.status ?? "unknown");
+  const dedupeWindow = resolveDedupeWindow(summary, runtimeConfig);
   const { assessment } = assessRun({
     status,
     errors,
@@ -168,6 +183,7 @@ async function loadRunMetrics(summaryPath: string): Promise<RunMetrics> {
     maxQueue,
     delivered,
     ordered,
+    dedupeWindow,
   });
 
   return {
@@ -194,6 +210,15 @@ async function loadRunMetrics(summaryPath: string): Promise<RunMetrics> {
     wallElapsedMs,
     peakRssMb,
     lastRssMb,
+    activeWindowSeconds: dedupeWindow.activeWindowSeconds,
+    configuredFloorSeconds: dedupeWindow.configuredFloorSeconds,
+    configuredMaxSeconds: dedupeWindow.configuredMaxSeconds,
+    violatesConfiguredFloor: dedupeWindow.violatesConfiguredFloor,
+    hasDedupeTelemetry: Object.keys(dedupe).length > 0,
+    acceptedEvents: Number(dedupe.acceptedEvents ?? 0),
+    droppedDuplicates: Number(dedupe.droppedDuplicates ?? 0),
+    currentCacheSize: Number(dedupe.currentCacheSize ?? 0),
+    peakDedupeCacheSize,
   };
 }
 
@@ -235,6 +260,40 @@ function formatDedupeLabel(summaryConfig: JsonRecord, runtimeConfig: JsonRecord 
   return "unknown";
 }
 
+function resolveDedupeWindow(
+  summary: JsonRecord,
+  runtimeConfig: JsonRecord | null,
+): {
+  activeWindowSeconds: number | null;
+  configuredFloorSeconds: number | null;
+  configuredMaxSeconds: number | null;
+  violatesConfiguredFloor: boolean;
+} {
+  const dedupe = summary.dedupe ?? {};
+  const dedupeConfig =
+    summary.config?.dedupeConfig ?? runtimeConfig?.dedupeConfig ?? {};
+  const activeWindowSeconds = toFiniteNumberOrNull(dedupe.activeWindowSeconds);
+  const configuredFloorSeconds = toFiniteNumberOrNull(dedupeConfig.slidingWindowSeconds);
+  const configuredMaxSeconds = toFiniteNumberOrNull(
+    dedupeConfig.maxSlidingWindowSeconds,
+  );
+
+  return {
+    activeWindowSeconds,
+    configuredFloorSeconds,
+    configuredMaxSeconds,
+    violatesConfiguredFloor:
+      activeWindowSeconds !== null &&
+      configuredFloorSeconds !== null &&
+      activeWindowSeconds + 1e-9 < configuredFloorSeconds,
+  };
+}
+
+function toFiniteNumberOrNull(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function buildComparisonReport(left: RunMetrics, right: RunMetrics): string {
   const lines: string[] = [];
   lines.push(`Compare: ${left.name} -> ${right.name}`);
@@ -263,6 +322,12 @@ function buildComparisonReport(left: RunMetrics, right: RunMetrics): string {
   );
   lines.push(
     `Anomalies: total=${left.anomalies} -> ${right.anomalies} | warn=${left.warnings} -> ${right.warnings} | error=${left.errors} -> ${right.errors}`,
+  );
+  lines.push(
+    `Dedupe window: ${formatWindow(left)} -> ${formatWindow(right)}`,
+  );
+  lines.push(
+    `Dedupe validation: ${formatDedupeValidation(left)} -> ${formatDedupeValidation(right)}`,
   );
 
   if (left.peakRssMb !== null || right.peakRssMb !== null) {
@@ -295,6 +360,16 @@ function buildReading(left: RunMetrics, right: RunMetrics): string[] {
 
   if (left.profileName !== right.profileName) {
     notes.push("the two runs use different workload profiles, so treat the comparison as directional rather than apples-to-apples");
+  }
+
+  if (left.violatesConfiguredFloor || right.violatesConfiguredFloor) {
+    if (!left.violatesConfiguredFloor && right.violatesConfiguredFloor) {
+      notes.push("the newer run drifted below its configured dedupe floor, so this is not a trustworthy tuning comparison");
+    } else if (left.violatesConfiguredFloor && !right.violatesConfiguredFloor) {
+      notes.push("the older run drifted below its configured dedupe floor, so part of the apparent improvement may simply be config correctness");
+    } else {
+      notes.push("both runs drifted below their configured dedupe floors, so treat the comparison as invalid for tuning");
+    }
   }
 
   if (left.errors === 0 && right.errors === 0) {
@@ -351,6 +426,12 @@ function assessRun(input: {
   maxQueue: number;
   delivered: number;
   ordered: number;
+  dedupeWindow: {
+    activeWindowSeconds: number | null;
+    configuredFloorSeconds: number | null;
+    configuredMaxSeconds: number | null;
+    violatesConfiguredFloor: boolean;
+  };
 }): { assessment: string; reasons: string[] } {
   const reasons: string[] = [];
 
@@ -361,6 +442,10 @@ function assessRun(input: {
 
   if (input.errors > 0) {
     reasons.push(`${input.errors} error-level anomalies were recorded`);
+  }
+
+  if (input.dedupeWindow.violatesConfiguredFloor) {
+    reasons.push("active dedupe window fell below the configured floor");
   }
 
   if (input.late > 0 && input.delivered > 0) {
@@ -398,6 +483,9 @@ function assessRun(input: {
   }
 
   if (input.status === "completed") {
+    if (input.dedupeWindow.violatesConfiguredFloor) {
+      return { assessment: "invalid", reasons };
+    }
     return { assessment: "degraded", reasons };
   }
 
@@ -410,6 +498,9 @@ function deriveVerdict(input: { status: string; assessment: string }): string {
   }
   if (input.status === "interrupted") {
     return "INTERRUPTED";
+  }
+  if (input.status === "completed" && input.assessment === "invalid") {
+    return "INVALID CONFIG";
   }
   if (input.status === "completed" && input.assessment === "healthy") {
     return "PASS";
@@ -456,6 +547,66 @@ function formatLeakage(run: RunMetrics): string {
   const ratio =
     run.duplicateLeakageRatio === null ? "n/a" : formatPercent(run.duplicateLeakageRatio);
   return `${run.duplicateLeakage}/${run.duplicatesInjected} (${ratio})`;
+}
+
+function formatWindow(run: RunMetrics): string {
+  const parts = [`active=${formatMaybeSeconds(run.activeWindowSeconds)}`];
+  if (run.configuredFloorSeconds !== null) {
+    parts.push(`floor=${run.configuredFloorSeconds}s`);
+  }
+  if (run.configuredMaxSeconds !== null) {
+    parts.push(`max=${run.configuredMaxSeconds}s`);
+  }
+  if (run.violatesConfiguredFloor) {
+    parts.push("below_floor");
+  }
+  return parts.join(" ");
+}
+
+function formatMaybeSeconds(value: number | null): string {
+  return value === null ? "n/a" : `${value}s`;
+}
+
+function formatDedupeValidation(run: RunMetrics): string {
+  if (!run.hasDedupeTelemetry) {
+    return "telemetry=missing";
+  }
+
+  const configStatus = run.violatesConfiguredFloor
+    ? "invalid"
+    : run.configuredFloorSeconds !== null
+      ? "ok"
+      : "observed";
+  const parts = [`config=${configStatus}`];
+
+  if (run.acceptedEvents === 0 && run.generated > 0) {
+    parts.push("traffic=suspicious");
+  } else if (run.acceptedEvents === 0) {
+    parts.push("traffic=idle");
+  } else {
+    parts.push("traffic=ok");
+  }
+
+  if (run.duplicatesInjected > 0 && run.droppedDuplicates === 0) {
+    parts.push("suppression=warning");
+  } else if (run.droppedDuplicates > 0) {
+    parts.push("suppression=active");
+  } else {
+    parts.push("suppression=idle");
+  }
+
+  const pressureRatio = run.acceptedEvents > 0 ? run.peakDedupeCacheSize / run.acceptedEvents : 0;
+  if (run.acceptedEvents === 0) {
+    parts.push("pressure=unknown");
+  } else if (pressureRatio >= 0.01) {
+    parts.push("pressure=warning");
+  } else if (pressureRatio >= 0.002) {
+    parts.push("pressure=noticeable");
+  } else {
+    parts.push("pressure=controlled");
+  }
+
+  return parts.join(" ");
 }
 
 function describeCorrectness(run: RunMetrics): string {

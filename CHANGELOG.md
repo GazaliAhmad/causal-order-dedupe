@@ -4,16 +4,46 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [1.0.6]
+
+### Deprecation Note
+
+Published versions `1.0.2` through `1.0.5` are deprecated for config-faithful runtime tuning.
+
+Canonical reason:
+
+- defect 1: `updateWindow()` only enforced the max, not the min. A config such as `slidingWindowSeconds = 210` could still be shrunk by runtime updates because the live window was set to whatever dynamic value was computed, as long as it did not go above `maxSlidingWindowSeconds`. That is how a configured `210s` floor could become a live `77.408s` window.
+- defect 2: the deployment-style runtime harness called `cleanup()` manually after every accepted event. That meant runtime cleanup did not actually depend on `autoCleanup`, and did not actually wait for `autoCleanupIntervalSeconds`, so the harness was overriding the configured cleanup behavior.
+
+Practical consequence:
+
+- runtime dedupe behavior could drift away from the configured temporal retention contract
+- wall-clock tuning conclusions from those versions should not be treated as authoritative
+
 ### Added
 
-- Added a `summary:compare` script for side-by-side comparison of two runtime harness runs, including duplicate leakage, late ratio, queue peak, anomaly counts, and peak RSS.
-- Added explicit operator guidance for a documented `8h` wall-clock baseline on `expected-production-3way-mesh` with the `standard` preset.
+- Added expanded operator guidance for longer wall-clock runtime comparisons on `expected-production-3way-mesh`.
 - Added a three-way equilibrium model to the operator guide so run evaluation is framed through correctness, pressure, and backlog together.
+- Added `DedupeGateway#getStats()` so package users can read lightweight runtime dedupe stats through accepted-event count, dropped-duplicate count, current cache size, and active window seconds.
+- Added stats contract coverage for dedupe runtime snapshots, cleanup behavior, window updates, and destroy/reset behavior.
+- Added dedupe stats persistence to fresh deployment-style runtime artifacts so `summary.json` and `heartbeats.ndjson` capture package-facing dedupe readings.
+- Added tracked sanitized `test-artifects/` snapshots for the validated `8h` `expected-production-3way-mesh` baseline and comparison runs so guide readers can inspect the supporting evidence without pulling raw multi-megabyte local artifacts.
 
 ### Changed
 
+- Marked published versions `1.0.2` through `1.0.5` for deprecation in npm.
+- Fixed dedupe window updates so runtime widening can no longer shrink the active window below the configured `slidingWindowSeconds` floor.
+- Fixed the deployment-style runtime harness to stop forcing `cleanup()` after every accepted event, so `autoCleanup` and `autoCleanupIntervalSeconds` from dedupe config files are now actually honored during runtime tests.
+- Updated `summary:report` and `summary:compare` to flag config-adherence failures as `INVALID CONFIG` when the observed active dedupe window falls below the configured floor.
+- Updated the tuning and deployment guides to treat older pre-fix runtime verdicts as provisional and to require checking `activeWindowSeconds` before trusting tuning conclusions.
+- Updated public docs to treat wall-clock runtime conclusions as authoritative only when they come from the fixed dedupe implementation.
 - Updated run-comparison output to summarize equilibrium directly with labeled correctness, pressure, and backlog readings.
 - Updated operator tuning guidance to treat late-arrival counts as one dimension of system pressure rather than a standalone pass/fail signal.
+- Updated the `README.md`, deployment guide, and repo tuning guide to document `getStats()` and explain how to interpret dedupe stats through correctness, pressure, and backlog.
+- Updated `summary:report` to print persisted dedupe stats for fresh deployment-style runs.
+- Updated operator guidance to record the validated `8h` `expected-production-3way-mesh` results: `standard` remains the cleaner default baseline, `heavy-duplicates` is a healthy alternate but not a meaningful enough win to replace it, and manual tuning is not required for that profile based on current evidence.
 
 ## [1.0.5]
 
@@ -21,9 +51,13 @@ All notable changes to this project will be documented in this file.
 
 - Added JSON config-file support for dedupe setup through exported helpers that load validated dedupe options from disk.
 - Added runtime harness support for `--dedupe-config` so deployment-style runs can exercise file-based dedupe configuration directly.
+- Added a `summary:compare` script for side-by-side comparison of two runtime harness runs, including duplicate leakage, late ratio, queue peak, anomaly counts, and peak RSS.
 - Added a dedicated `configs/` location for repo-side dedupe configuration examples so manual dedupe windows stay separate from workload profiles under `profiles/`.
 - Added focused validation coverage for dedupe config files and runtime/workload-profile configuration failures.
+- Added a dedicated `test:runtime-config` contract path for runtime config and workload-profile validation failures.
 - Added an operator-facing error guide under `guides/` with example failure messages and recommended fixes.
+- Added a deployment guide and a dedupe-config authoring guide so package-facing setup is documented separately from repo workload testing.
+- Added project-level compatibility, security, and code-of-conduct docs.
 
 ### Changed
 
@@ -32,6 +66,7 @@ All notable changes to this project will be documented in this file.
 - Improved operator-facing runtime errors so configuration failures surface as clear `Error: ...` messages instead of ambiguous internal failures.
 - Updated the `README.md` and operator guides to document config-file setup, `profiles/` versus `configs/` separation, and validation troubleshooting.
 - Updated the `publish-dist/` packaging flow so `README.md` and the publish surface are refreshed automatically during `prepack`, reducing the risk of publishing stale npm docs.
+- Updated repo automation with Node `20`/`24` CI coverage and CodeQL scanning.
 
 ## [1.0.4]
 
