@@ -105,6 +105,30 @@ function run(): void {
     /Invalid dedupe config file .*: choose either "preset" or explicit "slidingWindowSeconds" and "maxSlidingWindowSeconds", not both/,
   );
 
+  const validDedupeConfigPath = resolve(tempDir, "dedupe-valid.json");
+  writeFileSync(
+    validDedupeConfigPath,
+    `${JSON.stringify(
+      {
+        slidingWindowSeconds: 210,
+        maxSlidingWindowSeconds: 420,
+        autoCleanup: false,
+        autoCleanupIntervalSeconds: 15,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  const runtimeConfig = buildConfig(["--dedupe-config", validDedupeConfigPath]);
+  assert.ok(!("help" in runtimeConfig));
+  assert.deepEqual(runtimeConfig.dedupeConfig, {
+    slidingWindowSeconds: 210,
+    maxSlidingWindowSeconds: 420,
+    autoCleanup: false,
+    autoCleanupIntervalSeconds: 15,
+  });
+
   let formatted = "";
   try {
     buildConfig(["--dedupe-config", conflictingDedupeConfigPath]);

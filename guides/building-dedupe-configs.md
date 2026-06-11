@@ -193,7 +193,9 @@ Safer first choices:
 - `{"preset":"standard"}` for a general starting point
 - `{"preset":"heavy-duplicates"}` when duplicate pressure is a more obvious concern
 
-For the repo's documented `expected-production-3way-mesh` `8h` wall-clock comparison on `2026-06-09`, `heavy-duplicates` did not outperform `standard`, so do not treat it as the better default for that specific profile.
+For the repo's validated `expected-production-3way-mesh` `8h` wall-clock runs on `2026-06-10` to `2026-06-11`, `standard` remains the trustworthy starting point.
+The matching `heavy-duplicates` comparison also stayed healthy and honored its `300s` floor, but it did not improve duplicate leakage and it raised backlog and dedupe pressure enough that it still does not replace `standard` as the cleaner default for that profile.
+If you want to inspect the tracked evidence behind that conclusion, see [test-artifects/comparison.md](../test-artifects/comparison.md) and the paired run snapshots under [test-artifects](../test-artifects).
 
 Use a wider manual pair like `420 / 840` when:
 

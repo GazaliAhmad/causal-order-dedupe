@@ -141,65 +141,69 @@ npm run test:runtime -- --duration 10m --profile-file profiles/expected-producti
 
 Use this when you want to compare a hand-tuned dedupe window against the built-in presets without mixing the dedupe config file into the workload profile folder.
 
-Recent comparison on `expected-production-3way-mesh`:
-
-- in a short `5m` simulated run, `heavy-duplicates` looked cleaner than `standard`
-- in a longer `10m` wall-clock run, `heavy-duplicates` still showed stress and duplicate-event errors
-- `cross-node-busy` also landed at `PASS WITH STRESS` and did not outperform `standard` on duplicate leakage for this profile
-- `high-latency` performed worse for this profile and produced multiple error-level `duplicate_event` anomalies
-- in an `8h` wall-clock run, `standard` completed with `PASS`, `0` error-level anomalies, peak memory around `60.6MB`, and roughly `95%` of injected duplicates suppressed
-- in a second `8h` wall-clock run on `2026-06-09`, `heavy-duplicates` underperformed that baseline with `PASS WITH STRESS`, `2` `duplicate_event` errors, worse duplicate leakage, higher late ratio, and higher memory use
-
 Practical repo-testing takeaway:
 
-- keep `standard` as the preferred preset baseline for `expected-production-3way-mesh`
-- use `standard` and `cross-node-busy` as comparison points, not as obviously stronger defaults for this profile
-- avoid treating `high-latency` as the default choice for this mesh-style workload unless later evidence shows a real lateness-dominated need
-- do not treat `heavy-duplicates` as a better default for this mesh profile after the documented `8h` comparison
-- if the longer wall-clock run still reports duplicate-event errors or preset regressions, move on to a manual config under `configs/`
-- treat the `8h` `standard` run as a strong baseline anchor for future wall-clock comparisons on this mesh profile
+- if a longer wall-clock run reports `INVALID CONFIG` or shows `activeWindowSeconds` below the configured floor, do not use it for tuning decisions
+- use `standard`, `cross-node-busy`, `heavy-duplicates`, and `high-latency` as candidates to compare rather than as pre-ranked defaults
+- if fresh runs still report duplicate-event errors or preset regressions, move on to a manual config under `configs/`
 
-Documented `8h` baseline on `expected-production-3way-mesh` with `standard`:
+Fresh validated long-run baseline:
 
 ```bash
-npm run test:runtime -- --duration 8h --profile-file profiles/expected-production-3way-mesh.json --dedupe-preset standard --run-name expected-production-3way-mesh-standard-8h-wallclock
+npm run test:runtime -- --duration 8h --profile-file profiles/expected-production-3way-mesh.json --dedupe-preset standard --run-name expected-production-3way-mesh-standard-8h-postfix-baseline
 ```
 
-Observed outcome from the `2026-06-09` run:
+The `2026-06-10` post-fix `8h` wall-clock baseline for `expected-production-3way-mesh + standard` completed with:
 
-- completed cleanly across all three nodes
 - `Verdict: PASS`
-- `duplicatesInjected=7516` with only `353` extra delivered events over generated volume
-- about `95.3%` of injected duplicates were suppressed
-- `late_arrival=161567` and `sequence_regression=41402`, but all anomalies remained warning-level
-- memory stayed stable at about `59.0MB` last RSS and `60.6MB` peak RSS
+- `Status: completed`
+- `Assessment: healthy`
+- `activeWindowSeconds: 180s`, matching the configured `standard` floor exactly
+- `acceptedEvents: 1144896`
+- `droppedDuplicates: 7578`, matching `7578` injected duplicates
+- `error-level anomalies: 0`
+- `queue max: 1383`
+- `peak dedupe cache: 11429 ids`
+- `peak RSS: 73.0MB`
 
-Operational reading:
+Treat this as the current trustworthy long-run baseline for that exact profile and preset pair because the dedupe validation and the run-level verdict agreed.
 
-- `standard` held up over a full `8h` wall-clock run for this 3-way mesh profile
-- the ordering layer tolerated sustained lateness without escalating into correctness failures
-- this run is a good baseline to keep when judging later preset or manual-window comparisons
+Tracked inspection files for this run live under [test-artifects/expected-production-3way-mesh-standard-8h-postfix-baseline](../test-artifects/expected-production-3way-mesh-standard-8h-postfix-baseline), including `summary.json`, `run-config.json`, `lifecycle.ndjson`, and a sampled `anomalies.sample.ndjson`.
 
-Documented `8h` comparison result on `2026-06-09` with `heavy-duplicates`:
+Validated `8h` comparison result against `heavy-duplicates`:
 
 ```bash
-npm run test:runtime -- --duration 8h --profile-file profiles/expected-production-3way-mesh.json --dedupe-preset heavy-duplicates --run-name expected-production-3way-mesh-heavy-duplicates-8h-wallclock
+npm run test:runtime -- --duration 8h --profile-file profiles/expected-production-3way-mesh.json --dedupe-preset heavy-duplicates --run-name expected-production-3way-mesh-heavy-duplicates-8h-postfix
 ```
 
-Observed outcome from the `2026-06-09T14:31:26.602Z` to `2026-06-09T22:32:28.132Z` run:
+The `2026-06-10` to `2026-06-11` `8h` wall-clock comparison run for `expected-production-3way-mesh + heavy-duplicates` also completed cleanly:
 
-- completed, but only at `Verdict: PASS WITH STRESS`
-- `error=2`, both `duplicate_event`
-- duplicate leakage worsened from `353/7516 (4.70%)` under `standard` to `391/7358 (5.31%)`
-- late ratio rose from `14.10%` under `standard` to `15.46%`
-- queue peak improved only slightly from `1495` to `1450`
-- peak RSS increased from `60.6MB` to `68.2MB`
+- `Verdict: PASS`
+- `Status: completed`
+- `Assessment: healthy`
+- `activeWindowSeconds: 300s`, matching the configured `heavy-duplicates` floor exactly
+- `acceptedEvents: 1145401`
+- `droppedDuplicates: 7656`, matching `7656` injected duplicates
+- `error-level anomalies: 0`
+- `queue max: 1480`
+- `peak dedupe cache: 16570 ids`
+- `peak RSS: 74.1MB`
 
-Operational reading:
+Direct `summary:compare` reading against the validated `standard` baseline:
 
-- `heavy-duplicates` did not beat the `standard` baseline in the apples-to-apples `8h` mesh comparison
-- the heavier window bought a small backlog improvement, but it lost on correctness, lateness, duplicate leakage, and memory
-- for this profile, the next tuning step after `standard` should be a manual config rather than treating `heavy-duplicates` as the preferred preset
+- duplicate leakage stayed unchanged at `0`
+- late ratio improved from `16.02%` to `15.18%`
+- queue peak worsened from `1383` to `1480`
+- dedupe pressure rose from `noticeable` to `warning`
+- peak RSS rose by `1.1MB`
+
+Operational conclusion for this profile:
+
+- `heavy-duplicates` is a valid alternate preset, not a failed one
+- it is not a meaningful enough win to replace `standard` as the cleaner default baseline
+- the current architecture already looks healthy for this tested `8h` production-like mesh shape
+
+Tracked inspection files for the comparison live under [test-artifects](../test-artifects) and are summarized in [comparison.md](../test-artifects/comparison.md).
 
 Example baseline run:
 
@@ -237,14 +241,14 @@ npm run summary:compare -- <baseline-run-dir> <candidate-run-dir>
 
 If you omit both paths, `summary:compare` compares the two most recent runs.
 
-For the documented `8h` mesh baseline, a useful comparison flow is:
+The validated `8h` mesh comparison flow was:
 
 ```bash
-npm run test:runtime -- --duration 8h --profile-file profiles/expected-production-3way-mesh.json --dedupe-preset heavy-duplicates --run-name expected-production-3way-mesh-heavy-duplicates-8h-wallclock
+npm run test:runtime -- --duration 8h --profile-file profiles/expected-production-3way-mesh.json --dedupe-preset heavy-duplicates --run-name expected-production-3way-mesh-heavy-duplicates-8h-postfix
 ```
 
 ```bash
-npm run summary:compare -- artifacts/runs/2026-06-09T06-13-03Z-expected-production-3way-mesh-standard-8h-wallclock artifacts/runs/<new-heavy-duplicates-run>
+npm run summary:compare -- artifacts/runs/2026-06-10T10-06-07Z-expected-production-3way-mesh-standard-8h-postfix-baseline artifacts/runs/2026-06-10T18-12-37Z-expected-production-3way-mesh-heavy-duplicates-8h-postfix
 ```
 
 Focus first on:
@@ -253,15 +257,6 @@ Focus first on:
 - late ratio
 - queue peak
 - error-level anomalies
-
-Recorded result from the `2026-06-09` `standard` vs `heavy-duplicates` comparison:
-
-- `Verdict: PASS -> PASS WITH STRESS`
-- `duplicate leakage: 353/7516 (4.70%) -> 391/7358 (5.31%)`
-- `late ratio: 14.10% -> 15.46%`
-- `queue peak: 1495 -> 1450`
-- `error-level anomalies: 0 -> 2`
-- `peak RSS: 60.6MB -> 68.2MB`
 
 ## When `heavy-duplicates` Actually Wins
 
@@ -283,6 +278,7 @@ In practical terms:
 Good signs that the difference is meaningful:
 
 - duplicate leakage falls by a clearly visible amount in `summary:compare`
+- an `INVALID CONFIG` result disappears and both runs actually honor their configured floors
 - a `PASS WITH STRESS` result becomes a `PASS`
 - duplicate-related error anomalies disappear
 
@@ -292,12 +288,12 @@ Signs that the difference is probably not worth switching:
 - both runs are already `PASS` with `0` error-level anomalies and similar backlog
 - the heavier window mainly increases retention cost without changing the operator decision
 
-That is exactly what happened in the documented `2026-06-09` `8h` mesh comparison:
+That is the current validated outcome for the repo's `8h` `expected-production-3way-mesh` comparison:
 
-- `heavy-duplicates` did not improve duplicate leakage
-- it introduced `2` `duplicate_event` errors
-- it raised late ratio and memory use
-- the small queue improvement was not enough to change the operator decision
+- `heavy-duplicates` did not improve duplicate leakage over `standard`
+- it slightly improved late ratio, but increased backlog and dedupe pressure
+- both runs stayed healthy, so the operator decision does not materially change
+- `standard` remains the cleaner default baseline and `heavy-duplicates` remains a situational alternate
 
 ## How To Read the Results
 
@@ -338,6 +334,7 @@ Healthy baseline signs:
 - mostly warning-level anomalies
 - low or moderate queue depth
 - no error-level duplicate anomalies
+- `Validation:` confirms the dedupe window stayed within the configured floor and ceiling
 
 Stress signs:
 
@@ -346,29 +343,51 @@ Stress signs:
 - duplicate-event errors
 - degraded assessment in the human-readable report
 
-For the documented `8h` `expected-production-3way-mesh` baseline with `standard`, the equilibrium reads well:
+Before trusting any run as a baseline, make sure it also proves:
 
-- correctness stayed strong because the run finished `PASS`, `error=0`, and ordered matched delivered
-- pressure was real because the late ratio was about `14.1%`
-- backlog stayed controlled because queue peak was `1495` and the system drained to completion
+- `activeWindowSeconds` did not fall below the configured floor
+- the run did not come back as `INVALID CONFIG`
+- the runtime harness actually honored the cleanup settings from the config path
 
-## What Recent Runs Suggest
+## How Validation Actually Gates The Verdict
 
-In the local comparison runs:
+The important split is:
 
-- `expected-production` with `heavy-duplicates` looked better than `standard` on anomaly count and lateness
-- `expected-production-3way-mesh` with `standard` also proved stable in an `8h` wall-clock run and is now a documented baseline
-- `expected-production-3way-mesh` with `heavy-duplicates` lost to that baseline in the matching `8h` wall-clock comparison
-- `break-the-wire` remained stressed under both presets
-- `heavy-duplicates` helped remove duplicate-event errors in `break-the-wire`
-- `heavy-duplicates` did not materially solve the lateness or backlog pattern in `break-the-wire`
+- `getStats()` validates the live dedupe behavior
+- `summary:report` decides the run verdict from status, assessment, and config adherence
 
-Operator meaning:
+Read the harness output in this order:
 
-- choose `standard` for a normal baseline
-- for `expected-production-3way-mesh`, keep `standard` as the preferred preset unless a later run shows a materially different result
-- choose `heavy-duplicates` only when duplicate pressure is the clearly dominant problem and the comparison actually improves correctness
-- do not expect dedupe alone to solve a workload dominated by extreme lateness and partition-like delay
+1. `Status`
+2. `Validation`
+3. `Assessment`
+4. `Verdict`
+
+The reason for that order is simple:
+
+- if the run is not `completed`, it is not a clean baseline
+- if `Validation:` shows `activeWindowSeconds` below the configured floor, the result is `INVALID CONFIG` even if the process survived
+- only after config adherence is confirmed should `healthy` or `degraded` be used to interpret the workload itself
+
+For the `2026-06-10` `standard` baseline above, this chain held cleanly:
+
+- `Status: completed`
+- `dedupe config: observed (active window 180s)`
+- `dedupe traffic: ok (accepted 1144896 events)`
+- `dedupe suppression: active (dropped 7578 duplicates with 7578 injected)`
+- `dedupe pressure: noticeable (peak cache 11429 ids, 1.00% of accepted volume)`
+- `Assessment: healthy`
+- `Verdict: PASS`
+
+For package-facing deployments, `DedupeGateway#getStats()` now exposes a lighter-weight version of this same idea:
+
+- `droppedDuplicates` is the quickest local correctness signal
+- `currentCacheSize` is the quickest local pressure signal
+- `activeWindowSeconds` is the quickest config-adherence signal
+- `acceptedEvents` is the quickest local signal that the gateway is still forwarding real traffic
+- downstream queueing and latency remain the real backlog signals outside the repo harness
+
+Treat that runtime snapshot as a first read, not a replacement for the fuller harness reports in this guide.
 
 ## Matching Settings To Requirements
 
@@ -408,7 +427,8 @@ Use manual raw values when:
 
 1. Start with `expected-production` and `standard`.
 2. Review `summary:report`.
-3. If duplicate-related stress is still visible, compare against `heavy-duplicates`.
-4. If `heavy-duplicates` regresses or still shows correctness trouble, move to a manual config instead of assuming another preset will save the profile.
-5. If lateness dominates, test `high-latency` or widen the manual window.
-6. If a partition-style stress profile still degrades badly, treat that as an operational limit to investigate, not just a dedupe setting issue.
+3. Confirm that `summary:report` does not show `INVALID CONFIG` and that `activeWindowSeconds` stayed at or above the configured floor.
+4. If duplicate-related stress is still visible, compare against `heavy-duplicates`.
+5. If `heavy-duplicates` regresses, still shows correctness trouble, or raises retention cost without materially changing the operator decision, keep `standard` as the default and move to a manual config only when a real workload gap remains.
+6. If lateness dominates, test `high-latency` or widen the manual window.
+7. If a partition-style stress profile still degrades badly, treat that as an operational limit to investigate, not just a dedupe setting issue.

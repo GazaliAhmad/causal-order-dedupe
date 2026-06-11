@@ -1,0 +1,278 @@
+{
+  "outcome": {
+    "status": "completed",
+    "failure": null
+  },
+  "artifacts": {
+    "runDir": "artifacts\\runs\\2026-06-10T18-12-37Z-expected-production-3way-mesh-heavy-duplicates-8h-postfix",
+    "summaryPath": "artifacts\\runs\\2026-06-10T18-12-37Z-expected-production-3way-mesh-heavy-duplicates-8h-postfix\\summary.json",
+    "heartbeatPath": "artifacts\\runs\\2026-06-10T18-12-37Z-expected-production-3way-mesh-heavy-duplicates-8h-postfix\\heartbeats.ndjson",
+    "anomalyPath": "artifacts\\runs\\2026-06-10T18-12-37Z-expected-production-3way-mesh-heavy-duplicates-8h-postfix\\anomalies.ndjson",
+    "lifecyclePath": "artifacts\\runs\\2026-06-10T18-12-37Z-expected-production-3way-mesh-heavy-duplicates-8h-postfix\\lifecycle.ndjson",
+    "configPath": "artifacts\\runs\\2026-06-10T18-12-37Z-expected-production-3way-mesh-heavy-duplicates-8h-postfix\\run-config.json"
+  },
+  "config": {
+    "durationMs": "28800000",
+    "steadyForMs": "8640000",
+    "eventsPerSecond": 18,
+    "chaosMultiplier": 1.6,
+    "batchSize": 200,
+    "maxLateArrivalMs": "60000",
+    "maxTailDrainMs": "300000",
+    "lateArrivalPolicy": "flag",
+    "reportEveryMs": "30000",
+    "timeScale": 1,
+    "outputDir": "artifacts/runs",
+    "runName": "expected-production-3way-mesh-heavy-duplicates-8h-postfix",
+    "strict": false,
+    "allowUnknownOrder": true,
+    "detectAnomalies": true,
+    "tieBreaker": "ingestion_order",
+    "nodeIds": [
+      "edge-a",
+      "edge-b",
+      "edge-c"
+    ],
+    "model": "deployment_local_tcp",
+    "profileName": "expected-production-3way-mesh",
+    "profileDescription": "Production profile scaled to a triangular 3-node mesh configuration.",
+    "profileSource": "profiles\\expected-production-3way-mesh.json"
+  },
+  "timing": {
+    "startedAtIso": "2026-06-10T18:12:37.801Z",
+    "finishedAtIso": "2026-06-11T02:12:57.695Z",
+    "wallElapsedMs": 28819894,
+    "simulatedElapsedMs": "28819894",
+    "interrupted": false
+  },
+  "transport": {
+    "receivedEvents": 1145401,
+    "receivedByNode": {
+      "edge-b": 382669,
+      "edge-c": 380530,
+      "edge-a": 382202
+    },
+    "connectedNodes": {
+      "edge-a": true,
+      "edge-b": true,
+      "edge-c": true
+    },
+    "peerHintsBroadcast": 2289983,
+    "nodeStats": {
+      "edge-a": {
+        "generated": 382202,
+        "sent": 384721,
+        "duplicatesInjected": 2519,
+        "sameNodeDependencies": 45688,
+        "crossNodeDependencies": 290304,
+        "remoteHintsReceived": 762746,
+        "maxPendingQueueDepth": 1427
+      },
+      "edge-b": {
+        "generated": 382669,
+        "sent": 385240,
+        "duplicatesInjected": 2571,
+        "sameNodeDependencies": 46136,
+        "crossNodeDependencies": 290339,
+        "remoteHintsReceived": 762366,
+        "maxPendingQueueDepth": 1336
+      },
+      "edge-c": {
+        "generated": 380530,
+        "sent": 383096,
+        "duplicatesInjected": 2566,
+        "sameNodeDependencies": 45545,
+        "crossNodeDependencies": 289260,
+        "remoteHintsReceived": 764871,
+        "maxPendingQueueDepth": 1480
+      }
+    },
+    "persistedLateArrivals": 200
+  },
+  "stream": {
+    "batches": 337624,
+    "correctionBatches": 0,
+    "finalBatches": 1,
+    "orderedEvents": 1145401,
+    "anomalies": 214400,
+    "maxWatermarkMs": "1781143897798",
+    "lastWatermarkMs": "1781143897798",
+    "byAnomalyType": {
+      "sequence_regression": 40524,
+      "late_arrival": 173876
+    },
+    "byAnomalySeverity": {
+      "warning": 214400
+    },
+    "byOrderBasis": {
+      "sequence": 1145036,
+      "causal": 365
+    },
+    "byConfidence": {
+      "derived": 482842,
+      "proven": 662559
+    }
+  },
+  "dedupe": {
+    "acceptedEvents": 1145401,
+    "droppedDuplicates": 7656,
+    "currentCacheSize": 15257,
+    "activeWindowSeconds": 300
+  },
+  "samples": {
+    "anomalies": [
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-c-000000000858",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-c-000000001180",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-c-000000002971",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-a-000000003790",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-b-000000004175",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-c-000000004939",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-c-000000005724",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-c-000000007459",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-b-000000009421",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-a-000000009363",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-a-000000009765",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-b-000000010144",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-c-000000011124",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-a-000000011324",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-c-000000011440",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-a-000000011475",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-a-000000011648",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-c-000000012371",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-b-000000013477",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-a-000000013839",
+        "relatedEventIds": null,
+        "message": "Sequence regressed for node"
+      }
+    ],
+    "corrections": null
+  },
+  "simulation": {
+    "generated": 1145401,
+    "delivered": 1145401,
+    "sent": 1153057,
+    "duplicatesInjected": 7656,
+    "sameNodeDependencies": 137369,
+    "crossNodeDependencies": 869903,
+    "remoteHintsReceived": 2289983,
+    "maxPendingQueueDepth": 1480,
+    "maxQueueDepth": 1480
+  }
+}

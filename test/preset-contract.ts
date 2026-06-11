@@ -61,6 +61,12 @@ function run(): void {
     defaultGateway.maxSlidingWindowMs,
     PRESET_EXPECTATIONS.standard.maxSlidingWindowMs,
   );
+  assert.deepEqual(defaultGateway.getStats(), {
+    acceptedEvents: 0,
+    droppedDuplicates: 0,
+    currentCacheSize: 0,
+    activeWindowSeconds: 180,
+  });
 
   const manualGateway = new DedupeGateway({
     slidingWindowSeconds: 240,
@@ -110,9 +116,27 @@ function run(): void {
     nowProvider: () => nowMs,
   });
   assert.equal(autoCleanupGateway.filter({ id: "event-a" }), true);
+  assert.deepEqual(autoCleanupGateway.getStats(), {
+    acceptedEvents: 1,
+    droppedDuplicates: 0,
+    currentCacheSize: 1,
+    activeWindowSeconds: 1,
+  });
   nowMs = 2_500;
   assert.equal(autoCleanupGateway.filter({ id: "event-b" }), true);
+  assert.deepEqual(autoCleanupGateway.getStats(), {
+    acceptedEvents: 2,
+    droppedDuplicates: 0,
+    currentCacheSize: 1,
+    activeWindowSeconds: 1,
+  });
   assert.equal(autoCleanupGateway.filter({ id: "event-a" }), true);
+  assert.deepEqual(autoCleanupGateway.getStats(), {
+    acceptedEvents: 3,
+    droppedDuplicates: 0,
+    currentCacheSize: 2,
+    activeWindowSeconds: 1,
+  });
 
   nowMs = 0;
   const manualCleanupGateway = new DedupeGateway({
@@ -122,10 +146,88 @@ function run(): void {
     nowProvider: () => nowMs,
   });
   assert.equal(manualCleanupGateway.filter({ id: "event-a" }), true);
+  assert.deepEqual(manualCleanupGateway.getStats(), {
+    acceptedEvents: 1,
+    droppedDuplicates: 0,
+    currentCacheSize: 1,
+    activeWindowSeconds: 1,
+  });
   nowMs = 2_500;
   assert.equal(manualCleanupGateway.filter({ id: "event-a" }), false);
+  assert.deepEqual(manualCleanupGateway.getStats(), {
+    acceptedEvents: 1,
+    droppedDuplicates: 1,
+    currentCacheSize: 1,
+    activeWindowSeconds: 1,
+  });
   manualCleanupGateway.cleanup();
+  assert.deepEqual(manualCleanupGateway.getStats(), {
+    acceptedEvents: 1,
+    droppedDuplicates: 1,
+    currentCacheSize: 0,
+    activeWindowSeconds: 1,
+  });
   assert.equal(manualCleanupGateway.filter({ id: "event-a" }), true);
+  assert.deepEqual(manualCleanupGateway.getStats(), {
+    acceptedEvents: 2,
+    droppedDuplicates: 1,
+    currentCacheSize: 1,
+    activeWindowSeconds: 1,
+  });
+
+  const identityFallbackGateway = new DedupeGateway({
+    slidingWindowSeconds: 2,
+    maxSlidingWindowSeconds: 4,
+  });
+  assert.equal(identityFallbackGateway.filter({}), true);
+  assert.equal(
+    identityFallbackGateway.filter({ nodeId: "node-a", sequence: 1 }),
+    true,
+  );
+  assert.equal(
+    identityFallbackGateway.filter({ nodeId: "node-a", sequence: 1 }),
+    false,
+  );
+  identityFallbackGateway.updateWindow(3);
+  assert.deepEqual(identityFallbackGateway.getStats(), {
+    acceptedEvents: 2,
+    droppedDuplicates: 1,
+    currentCacheSize: 1,
+    activeWindowSeconds: 3,
+  });
+  identityFallbackGateway.updateWindow(1);
+  assert.deepEqual(identityFallbackGateway.getStats(), {
+    acceptedEvents: 2,
+    droppedDuplicates: 1,
+    currentCacheSize: 1,
+    activeWindowSeconds: 2,
+  });
+  identityFallbackGateway.destroy();
+  assert.deepEqual(identityFallbackGateway.getStats(), {
+    acceptedEvents: 0,
+    droppedDuplicates: 0,
+    currentCacheSize: 0,
+    activeWindowSeconds: 2,
+  });
+
+  const manualFloorGateway = new DedupeGateway({
+    slidingWindowSeconds: 210,
+    maxSlidingWindowSeconds: 420,
+  });
+  manualFloorGateway.updateWindow(77.408);
+  assert.deepEqual(manualFloorGateway.getStats(), {
+    acceptedEvents: 0,
+    droppedDuplicates: 0,
+    currentCacheSize: 0,
+    activeWindowSeconds: 210,
+  });
+  manualFloorGateway.updateWindow(600);
+  assert.deepEqual(manualFloorGateway.getStats(), {
+    acceptedEvents: 0,
+    droppedDuplicates: 0,
+    currentCacheSize: 0,
+    activeWindowSeconds: 420,
+  });
 
   const presetConfigPath = resolve(tempDir, "dedupe-preset.json");
   writeFileSync(
@@ -157,6 +259,24 @@ function run(): void {
     PRESET_EXPECTATIONS["cross-node-busy"].maxSlidingWindowMs,
   );
 
+  nowMs = 0;
+  const presetFileBehaviorGateway = createDedupeGatewayFromConfigFile(
+    presetConfigPath,
+    {
+      nowProvider: () => nowMs,
+    },
+  );
+  assert.equal(presetFileBehaviorGateway.filter({ id: "event-a" }), true);
+  nowMs = 11_000;
+  assert.equal(presetFileBehaviorGateway.filter({ id: "event-b" }), true);
+  assert.deepEqual(presetFileBehaviorGateway.getStats(), {
+    acceptedEvents: 2,
+    droppedDuplicates: 0,
+    currentCacheSize: 2,
+    activeWindowSeconds: 240,
+  });
+  assert.equal(presetFileBehaviorGateway.filter({ id: "event-a" }), false);
+
   const manualConfigPath = resolve(tempDir, "dedupe-manual.json");
   writeFileSync(
     manualConfigPath,
@@ -180,6 +300,45 @@ function run(): void {
   const manualFileGateway = createDedupeGatewayFromConfigFile(manualConfigPath);
   assert.equal(manualFileGateway.currentWindowMs, 210_000n);
   assert.equal(manualFileGateway.maxSlidingWindowMs, 420_000n);
+
+  const intervalConfigPath = resolve(tempDir, "dedupe-interval.json");
+  writeFileSync(
+    intervalConfigPath,
+    `${JSON.stringify(
+      {
+        slidingWindowSeconds: 1,
+        maxSlidingWindowSeconds: 1,
+        autoCleanupIntervalSeconds: 5,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  nowMs = 0;
+  const intervalFileGateway = createDedupeGatewayFromConfigFile(
+    intervalConfigPath,
+    {
+      nowProvider: () => nowMs,
+    },
+  );
+  assert.equal(intervalFileGateway.filter({ id: "event-a" }), true);
+  nowMs = 2_500;
+  assert.equal(intervalFileGateway.filter({ id: "event-b" }), true);
+  assert.deepEqual(intervalFileGateway.getStats(), {
+    acceptedEvents: 2,
+    droppedDuplicates: 0,
+    currentCacheSize: 2,
+    activeWindowSeconds: 1,
+  });
+  nowMs = 5_500;
+  assert.equal(intervalFileGateway.filter({ id: "event-c" }), true);
+  assert.deepEqual(intervalFileGateway.getStats(), {
+    acceptedEvents: 3,
+    droppedDuplicates: 0,
+    currentCacheSize: 1,
+    activeWindowSeconds: 1,
+  });
 
   const conflictingConfigPath = resolve(tempDir, "dedupe-conflict.json");
   writeFileSync(
