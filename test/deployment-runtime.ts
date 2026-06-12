@@ -1,5 +1,5 @@
 import { type ChildProcess, fork } from "node:child_process";
-import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -136,6 +136,7 @@ async function main(): Promise<void> {
     log(formatOperatorError(error));
     cleanup("SIGTERM");
     await Promise.allSettled([collectorExitPromise, ...nodeExitPromises]);
+    writeFallbackSummary(runtimeConfig, error);
     process.exitCode = 1;
   }
 }
@@ -209,6 +210,192 @@ function waitForExit(
       resolveExit({ name, code: code ?? 0, signal });
     });
   });
+}
+
+function writeFallbackSummary(
+  config: RuntimeConfigWithArtifacts,
+  error: unknown,
+): void {
+  if (existsSync(config.artifacts.summaryPath)) {
+    return;
+  }
+
+  const lifecycle = loadNdjson(config.artifacts.lifecyclePath);
+  const heartbeats = loadNdjson(config.artifacts.heartbeatPath);
+  const anomalies = loadNdjson(config.artifacts.anomalyPath);
+
+  const connectedNodes: Record<string, boolean> = {};
+  const nodeStats: Record<string, Record<string, unknown>> = {};
+  for (const row of lifecycle) {
+    if (row.event === "node_connected" && typeof row.nodeId === "string") {
+      connectedNodes[row.nodeId] = true;
+    }
+    if (row.event === "node_completed" && typeof row.nodeId === "string") {
+      nodeStats[row.nodeId] =
+        row.stats && typeof row.stats === "object"
+          ? (row.stats as Record<string, unknown>)
+          : {};
+    }
+  }
+
+  const byAnomalyType: Record<string, number> = {};
+  const byAnomalySeverity: Record<string, number> = {};
+  const anomalySamples: Array<Record<string, unknown>> = [];
+  for (const row of anomalies) {
+    const type = typeof row.type === "string" ? row.type : "unknown";
+    const severity = typeof row.severity === "string" ? row.severity : "warning";
+    byAnomalyType[type] = (byAnomalyType[type] ?? 0) + 1;
+    byAnomalySeverity[severity] = (byAnomalySeverity[severity] ?? 0) + 1;
+    if (anomalySamples.length < config.sampleLimit) {
+      anomalySamples.push({
+        type,
+        severity,
+        eventId: row.eventId ?? null,
+        relatedEventIds: Array.isArray(row.relatedEventIds) ? row.relatedEventIds : [],
+        message: row.message ?? "",
+      });
+    }
+  }
+
+  const lastHeartbeat = heartbeats.at(-1) ?? {};
+  const maxRssBytes = Math.max(
+    0,
+    ...heartbeats.map((row) => Number(row.rssBytes ?? 0)),
+  );
+  const completedNodeStats = Object.values(nodeStats);
+  const dedupe = (lastHeartbeat.dedupe ?? {}) as Record<string, unknown>;
+
+  const summary = {
+    outcome: {
+      status: "failed",
+      failure: serializeFailure(error),
+    },
+    artifacts: {
+      runDir: config.artifacts.runDir,
+      summaryPath: config.artifacts.summaryPath,
+      heartbeatPath: config.artifacts.heartbeatPath,
+      anomalyPath: config.artifacts.anomalyPath,
+      duplicateLeakPath: config.artifacts.duplicateLeakPath,
+      lifecyclePath: config.artifacts.lifecyclePath,
+      configPath: config.artifacts.configPath,
+    },
+    config: {
+      durationMs: config.durationMs.toString(),
+      steadyForMs: config.steadyForMs.toString(),
+      eventsPerSecond: config.eventsPerSecond,
+      chaosMultiplier: config.chaosMultiplier,
+      batchSize: config.batchSize,
+      maxLateArrivalMs: config.maxLateArrivalMs.toString(),
+      maxTailDrainMs: config.maxTailDrainMs.toString(),
+      lateArrivalPolicy: config.lateArrivalPolicy,
+      reportEveryMs: config.reportEveryMs.toString(),
+      timeScale: config.timeScale,
+      outputDir: config.outputDir,
+      runName: config.runName,
+      strict: config.strict,
+      allowUnknownOrder: config.allowUnknownOrder,
+      detectAnomalies: config.detectAnomalies,
+      tieBreaker: config.tieBreaker,
+      nodeIds: config.nodeIds,
+      model: "deployment_local_tcp",
+      profileName: config.workloadProfile?.name ?? "unknown",
+      profileDescription: config.workloadProfile?.description ?? "",
+      profileSource: config.profileSource ?? null,
+    },
+    timing: {
+      startedAtIso: new Date(config.wallStartMs).toISOString(),
+      finishedAtIso: new Date().toISOString(),
+      wallElapsedMs: Math.max(0, Date.now() - config.wallStartMs),
+      simulatedElapsedMs: String(lastHeartbeat.simulatedElapsedMs ?? "0"),
+      interrupted: false,
+    },
+    transport: {
+      receivedEvents: Number(lastHeartbeat.received ?? 0),
+      receivedByNode: {},
+      connectedNodes,
+      peerHintsBroadcast: 0,
+      nodeStats,
+      persistedLateArrivals: 0,
+    },
+    stream: {
+      batches: 0,
+      correctionBatches: 0,
+      finalBatches: 0,
+      orderedEvents: Number(lastHeartbeat.ordered ?? 0),
+      anomalies: Number(lastHeartbeat.anomalies ?? anomalies.length),
+      maxWatermarkMs: "0",
+      lastWatermarkMs: "0",
+      byAnomalyType,
+      byAnomalySeverity,
+      byOrderBasis: {},
+      byConfidence: {},
+    },
+    dedupe,
+    simulation: {
+      generated: sumBy(completedNodeStats, "generated"),
+      delivered: Number(lastHeartbeat.received ?? 0),
+      sent: sumBy(completedNodeStats, "sent"),
+      duplicatesInjected: sumBy(completedNodeStats, "duplicatesInjected"),
+      sameNodeDependencies: sumBy(completedNodeStats, "sameNodeDependencies"),
+      crossNodeDependencies: sumBy(completedNodeStats, "crossNodeDependencies"),
+      remoteHintsReceived: sumBy(completedNodeStats, "remoteHintsReceived"),
+      maxPendingQueueDepth: sumMaxBy(completedNodeStats, "maxPendingQueueDepth"),
+      maxQueueDepth: sumMaxBy(completedNodeStats, "maxPendingQueueDepth"),
+    },
+    samples: {
+      anomalies: anomalySamples,
+      corrections: [],
+    },
+    fallback: {
+      synthesizedBy: "deployment-runtime",
+      reason: "collector exited before writing summary.json",
+      maxRssBytes,
+    },
+  };
+
+  writeFileSync(
+    config.artifacts.summaryPath,
+    `${JSON.stringify(summary, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+function loadNdjson(path: string): Array<Record<string, unknown>> {
+  if (!existsSync(path)) {
+    return [];
+  }
+
+  const rows: Array<Record<string, unknown>> = [];
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+    rows.push(JSON.parse(line) as Record<string, unknown>);
+  }
+  return rows;
+}
+
+function serializeFailure(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack ?? null,
+    };
+  }
+  return {
+    name: "Error",
+    message: String(error),
+    stack: null,
+  };
+}
+
+function sumBy(values: Array<Record<string, unknown>>, key: string): number {
+  return values.reduce((total, entry) => total + Number(entry[key] ?? 0), 0);
+}
+
+function sumMaxBy(values: Array<Record<string, unknown>>, key: string): number {
+  return values.reduce((maxValue, entry) => Math.max(maxValue, Number(entry[key] ?? 0)), 0);
 }
 
 main().catch((error) => {

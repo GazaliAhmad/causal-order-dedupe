@@ -2,15 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.0.7]
 
-No unreleased changes yet.
+### Added
+
+- Added deployment-style duplicate-leak diagnostics for fresh runtime runs so leaked `duplicate_event` anomalies are persisted as explicit operator-readable records instead of staying a black-box count.
+- Added a dedicated `duplicate-leaks.ndjson` runtime artifact beside the existing run artifacts so duplicate-leak diagnostics can be stored and inspected consistently.
+- Added collector-side duplicate-leak record generation that emits one diagnostic row per leaked duplicate using the repeated event and its first-seen related event from the anomaly.
+- Added persisted timing context for leaked duplicates, including:
+  - event ID
+  - node ID
+  - first-seen ingest timestamp
+  - repeated-seen ingest timestamp
+  - first and repeated event-time timestamps
+  - first and repeated arrival latency
+  - gap between sightings
+  - active dedupe window at repeat time
+  - whether the first-versus-repeat gap exceeded the active dedupe window
+- Added duplicate-leak artifact metadata to fresh run summaries so downstream tooling can discover the diagnostics path without guessing.
+- Added a `summary:duplicates` helper command for terminal-friendly duplicate-leak inspection of the latest or selected run.
+
+### Changed
+
+- Updated duplicate-leak reporting to default to the latest run when no path is provided and to accept either a run directory or a `summary.json` path.
+- Updated duplicate-leak summaries to print run label, run path, diagnostics path, total leaks, delivery-relative leak rate, per-node counts, max first-versus-repeat gap, and one readable line per leaked duplicate.
+- Updated historical-run handling so older runs that predate `duplicate-leaks.ndjson` report that diagnostics are unavailable instead of implying that no duplicate leakage occurred.
+- Kept `1.0.7` behavior diagnostic-only: it improves operator evidence for duplicate leakage under stress without changing the underlying dedupe algorithm or final-drain behavior.
 
 ## [1.0.6]
 
 ### Deprecation Note
 
-Published versions `1.0.2` through `1.0.5` are deprecated for config-faithful runtime tuning.
+Published versions `1.0.1` through `1.0.5` are deprecated for config-faithful runtime tuning.
+
+Separately:
+
+- version `1.0.0` was published and immediately deprecated because `LICENSE.md` was accidentally excluded from the npm package
+- version `1.0.3` was never published to npm
 
 Canonical reason:
 
@@ -29,11 +57,11 @@ Practical consequence:
 - Added `DedupeGateway#getStats()` so package users can read lightweight runtime dedupe stats through accepted-event count, dropped-duplicate count, current cache size, and active window seconds.
 - Added stats contract coverage for dedupe runtime snapshots, cleanup behavior, window updates, and destroy/reset behavior.
 - Added dedupe stats persistence to fresh deployment-style runtime artifacts so `summary.json` and `heartbeats.ndjson` capture package-facing dedupe readings.
-- Added tracked sanitized `test-artifects/` snapshots for the validated `8h` `expected-production-3way-mesh` baseline and comparison runs so guide readers can inspect the supporting evidence without pulling raw multi-megabyte local artifacts.
+- Added tracked sanitized `test-artifacts/` snapshots for the validated `8h` `expected-production-3way-mesh` baseline and comparison runs so guide readers can inspect the supporting evidence without pulling raw multi-megabyte local artifacts.
 
 ### Changed
 
-- Marked published versions `1.0.2` through `1.0.5` for deprecation in npm.
+- Marked published versions `1.0.1` through `1.0.5` for deprecation in npm.
 - Fixed dedupe window updates so runtime widening can no longer shrink the active window below the configured `slidingWindowSeconds` floor.
 - Fixed the deployment-style runtime harness to stop forcing `cleanup()` after every accepted event, so `autoCleanup` and `autoCleanupIntervalSeconds` from dedupe config files are now actually honored during runtime tests.
 - Updated `summary:report` and `summary:compare` to flag config-adherence failures as `INVALID CONFIG` when the observed active dedupe window falls below the configured floor.
@@ -85,6 +113,8 @@ Practical consequence:
 
 ## [1.0.3]
 
+This version was never published to npm.
+
 ### Changed
 
 - Clarified the published `README.md` version and documented the cleanup expectations for long-running processes.
@@ -104,6 +134,10 @@ Practical consequence:
 ## [1.0.0]
 
 Initial release of `@causal-order/dedupe`.
+
+Post-release note:
+
+- this version was published and immediately deprecated because `LICENSE.md` was accidentally excluded from the npm package
 
 ### Added
 

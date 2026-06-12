@@ -66,6 +66,7 @@ export interface RuntimeArtifacts {
   summaryPath: string;
   heartbeatPath: string;
   anomalyPath: string;
+  duplicateLeakPath: string;
   lifecyclePath: string;
   configPath: string;
   orchestratorLogPath: string;
@@ -579,6 +580,7 @@ export function buildRunArtifacts(
     summaryPath: explicitSummaryPath ?? resolve(runDir, "summary.json"),
     heartbeatPath: resolve(runDir, "heartbeats.ndjson"),
     anomalyPath: resolve(runDir, "anomalies.ndjson"),
+    duplicateLeakPath: resolve(runDir, "duplicate-leaks.ndjson"),
     lifecyclePath: resolve(runDir, "lifecycle.ndjson"),
     configPath: resolve(runDir, "run-config.json"),
     orchestratorLogPath: resolve(runDir, "orchestrator.log"),

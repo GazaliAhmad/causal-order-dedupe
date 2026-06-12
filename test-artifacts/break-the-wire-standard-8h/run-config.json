@@ -1,0 +1,96 @@
+{
+  "durationMs": "28800000",
+  "steadyForMs": "8640000",
+  "eventsPerSecond": 18,
+  "chaosMultiplier": 2,
+  "batchSize": 200,
+  "maxLateArrivalMs": "60000",
+  "maxTailDrainMs": "300000",
+  "lateArrivalPolicy": "flag",
+  "reportEveryMs": "30000",
+  "timeScale": 1,
+  "dedupeConfig": {
+    "preset": "standard"
+  },
+  "outputPath": null,
+  "outputDir": "artifacts/runs",
+  "runName": "break-the-wire-standard-8h",
+  "sampleLimit": 20,
+  "maxLateArrivalSamples": 200,
+  "strict": false,
+  "allowUnknownOrder": true,
+  "detectAnomalies": true,
+  "tieBreaker": "ingestion_order",
+  "nodeIds": [
+    "edge-a",
+    "edge-b",
+    "edge-c"
+  ],
+  "workloadProfile": {
+    "name": "break-the-wire",
+    "description": "Asymmetric partition stress test. Isolates edge-c with extreme transit stalls.",
+    "nodeWeights": {
+      "edge-a": 1,
+      "edge-b": 1,
+      "edge-c": 1
+    },
+    "phaseRates": {
+      "steadyEventsPerSecond": 18,
+      "chaosMultiplier": 2,
+      "chaosJitterMin": 0.95,
+      "chaosJitterMax": 1.15
+    },
+    "dependencies": {
+      "steadySameNodeChance": 0.1,
+      "steadyCrossNodeChance": 0.7,
+      "chaoticSameNodeChance": 0.05,
+      "chaoticCrossNodeChance": 0.85,
+      "sameNodeParentChance": 0.2,
+      "crossNodeParentChance": 0.95
+    },
+    "duplicates": {
+      "steadyChance": 0.002,
+      "chaoticChance": 0.02
+    },
+    "ordering": {
+      "steadyPreserveOrderChance": 0.995,
+      "chaoticPreserveOrderChance": 0.7
+    },
+    "delays": {
+      "steady": {
+        "baseMinMs": 15,
+        "baseMaxMs": 90,
+        "spikeChance": 0.02,
+        "spikeMinMs": 180,
+        "spikeMaxMs": 700
+      },
+      "chaotic": {
+        "baseMinMs": 40,
+        "baseMaxMs": 200,
+        "slowSpikeChance": 0.25,
+        "slowSpikeMinMs": 5000,
+        "slowSpikeMaxMs": 15000,
+        "lateSpikeChance": 0.15,
+        "lateSpikeMinMs": 30000,
+        "lateSpikeMaxMs": 120000,
+        "extremeSpikeChance": 0.08,
+        "extremeSpikeMinMs": 180000,
+        "extremeSpikeMaxMs": 240000
+      }
+    }
+  },
+  "profileSource": "profiles\\break-the-wire.json",
+  "wallStartMs": 1781146175036,
+  "artifacts": {
+    "runDir": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h",
+    "summaryPath": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h\\summary.json",
+    "heartbeatPath": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h\\heartbeats.ndjson",
+    "anomalyPath": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h\\anomalies.ndjson",
+    "lifecyclePath": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h\\lifecycle.ndjson",
+    "configPath": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h\\run-config.json",
+    "orchestratorLogPath": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h\\orchestrator.log",
+    "collectorStdoutPath": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h\\collector.stdout.log",
+    "collectorStderrPath": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h\\collector.stderr.log",
+    "nodesDir": "artifacts\\runs\\2026-06-11T02-49-35Z-break-the-wire-standard-8h\\nodes"
+  }
+}
