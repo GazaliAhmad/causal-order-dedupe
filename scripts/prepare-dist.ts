@@ -23,6 +23,7 @@ const publishedPackage = {
   name: rootPackage.name,
   version: rootPackage.version,
   description: rootPackage.description,
+  keywords: rootPackage.keywords,
   license: rootPackage.license,
   repository: rootPackage.repository,
   type: rootPackage.type,

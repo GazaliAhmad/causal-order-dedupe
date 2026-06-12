@@ -16,8 +16,14 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.0.7` is the current operator-diagnostics line:
-  - `1.0.7` is now published to npm
+- Version `1.0.7` is complete and published to npm.
+- `v1.0.8` is the active next release line.
+- Current `v1.0.8` focus:
+  - preserve the validated `3`-node path as the default baseline
+  - add an opt-in topology configuration path for larger single-cluster runs
+  - validate `n=5`, then `n=8`
+  - keep npm keyword/discoverability metadata work as a small secondary release item
+- Completed and already available from the published `1.0.7` line:
   - first-class preset support exists in `DedupeGateway`
   - default mode behaves as `standard`
   - config-file driven setup now exists for dedupe configuration
@@ -30,7 +36,7 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - fresh deployment-style runtime artifacts now persist dedupe stats
   - duplicate-leak diagnostics now persist in fresh deployment-style runtime artifacts
   - repo-side duplicate inspection now includes a reusable `summary:duplicates` command
-- Current repo-side operator workflow now also includes:
+- Current repo-side operator workflow also includes:
   - a three-way equilibrium model for reading runs through correctness, pressure, and backlog together
   - lightweight package-facing runtime stats through `DedupeGateway#getStats()`
   - persisted dedupe stats in fresh deployment-style runtime artifacts and reports
@@ -123,9 +129,33 @@ Released scope:
 - Completed a dedicated `summary:duplicates` helper for readable duplicate-leak inspection.
 - Made older pre-instrumentation runs report that diagnostics are unavailable instead of implying a clean “no leaks” result.
 - This release stays intentionally diagnostic-first:
-  - it improves operator evidence for duplicate leakage under stress
-  - it does not yet change the underlying dedupe or final-drain behavior
+- it improves operator evidence for duplicate leakage under stress
+- it does not yet change the underlying dedupe or final-drain behavior
 - Completed validation for this scope through fresh duplicate-leak instrumentation and inspection workflows rather than a new tuning contract.
+
+## v1.0.8
+
+- Treat this as a topology-validation release for the existing single-cluster runtime harness.
+- Primary goal:
+  - preserve the currently validated `3`-node path as the default and avoid destabilizing the existing baseline
+  - add an opt-in topology configuration path so larger single-cluster runs can be exercised without hardcoding new node counts into the default runtime flow
+- Required scope:
+  - keep the current `3`-node default behavior unchanged
+  - support opt-in single-cluster node-topology selection through configuration rather than repeated code edits
+  - use the new path to validate `n=5`, then `n=8`
+  - make the topology model extensible enough for later arbitrary `n` rather than only special-casing `5` and `8`
+- Guardrails:
+  - do not turn `v1.0.8` into multi-cluster orchestration yet
+  - do not introduce cluster federation or a super-engine in this release
+  - do not change dedupe semantics just to support higher node counts
+  - do not regress the validated `3`-node baseline
+- Secondary packaging scope:
+  - include the small npm metadata improvement for package discoverability in the same release
+  - keep that packaging work clearly secondary to the topology-validation goal
+  - preserve published-manifest alignment so package keywords survive the publish-dist flow
+- Intent:
+  - answer whether one `@causal-order/dedupe` + `causal-order` instance remains healthy as a single cluster grows beyond `3` nodes
+  - gather evidence for whether a later `@causal-order/cluster` package is actually needed, and if so, from what scale boundary
 
 ## v1.1.0
 

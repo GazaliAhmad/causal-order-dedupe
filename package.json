@@ -2,6 +2,14 @@
   "name": "@causal-order/dedupe",
   "version": "1.0.7",
   "description": "Deduplication support for causal-order event streams.",
+  "keywords": [
+    "causal-order",
+    "dedupe",
+    "deduplication",
+    "event-streams",
+    "stream-processing",
+    "idempotency"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
