@@ -27,6 +27,7 @@ const config = deserializeConfig(JSON.parse(rawConfig) as JsonRecord) as Runtime
     summaryPath: string;
     heartbeatPath: string;
     anomalyPath: string;
+    duplicateLeakPath: string;
     lifecyclePath: string;
     configPath: string;
     runDir: string;
@@ -259,6 +260,7 @@ async function ingestBatch(batch: JsonRecord): Promise<void> {
   }
 
   const anomalyRecords: JsonRecord[] = [];
+  const duplicateLeakRecords: JsonRecord[] = [];
   for (const anomaly of batch.anomalies) {
     countInto(summary.stream.byAnomalyType, anomaly.type);
     countInto(summary.stream.byAnomalySeverity, anomaly.severity);
@@ -288,6 +290,13 @@ async function ingestBatch(batch: JsonRecord): Promise<void> {
       }
     }
 
+    if (anomaly.type === "duplicate_event") {
+      const duplicateLeakRecord = buildDuplicateLeakRecord(anomaly);
+      if (duplicateLeakRecord) {
+        duplicateLeakRecords.push(duplicateLeakRecord);
+      }
+    }
+
     if (shouldPersistAnomaly(anomaly)) {
       anomalyRecords.push({
         timestampIso: new Date().toISOString(),
@@ -306,6 +315,14 @@ async function ingestBatch(batch: JsonRecord): Promise<void> {
     await appendFile(
       config.artifacts.anomalyPath,
       anomalyRecords.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+      "utf8",
+    );
+  }
+
+  if (duplicateLeakRecords.length > 0) {
+    await appendFile(
+      config.artifacts.duplicateLeakPath,
+      duplicateLeakRecords.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
       "utf8",
     );
   }
@@ -401,6 +418,7 @@ function createSummary(): JsonRecord {
       summaryPath: config.artifacts.summaryPath,
       heartbeatPath: config.artifacts.heartbeatPath,
       anomalyPath: config.artifacts.anomalyPath,
+      duplicateLeakPath: config.artifacts.duplicateLeakPath,
       lifecyclePath: config.artifacts.lifecyclePath,
       configPath: config.artifacts.configPath,
     },
@@ -512,6 +530,81 @@ function pushLimited(bucket: JsonRecord[], value: JsonRecord, limit: number): vo
 
 function log(message: string): void {
   process.stdout.write(`${message}\n`);
+}
+
+function buildDuplicateLeakRecord(anomaly: JsonRecord): JsonRecord | null {
+  const repeatedEvent = anomaly.event as JsonRecord | undefined;
+  const firstEvent = Array.isArray(anomaly.relatedEvents)
+    ? (anomaly.relatedEvents[0] as JsonRecord | undefined)
+    : undefined;
+
+  if (!repeatedEvent?.id) {
+    return null;
+  }
+
+  const firstSeenAtMs = toBigIntOrNull(firstEvent?.ingestedAt);
+  const repeatedSeenAtMs = toBigIntOrNull(repeatedEvent.ingestedAt);
+  const firstEventTimeMs = toBigIntOrNull(firstEvent?.clock?.physicalTimeMs);
+  const repeatedEventTimeMs = toBigIntOrNull(repeatedEvent.clock?.physicalTimeMs);
+  const seenGapMs =
+    firstSeenAtMs !== null && repeatedSeenAtMs !== null
+      ? repeatedSeenAtMs - firstSeenAtMs
+      : null;
+  const firstSeenLatencyMs =
+    firstSeenAtMs !== null && firstEventTimeMs !== null
+      ? firstSeenAtMs - firstEventTimeMs
+      : null;
+  const repeatedSeenLatencyMs =
+    repeatedSeenAtMs !== null && repeatedEventTimeMs !== null
+      ? repeatedSeenAtMs - repeatedEventTimeMs
+      : null;
+  const activeWindowSeconds = dedupeGate.getStats().activeWindowSeconds;
+  const activeWindowMs = BigInt(Math.round(activeWindowSeconds * 1000));
+
+  return {
+    timestampIso: new Date().toISOString(),
+    eventId: repeatedEvent.id,
+    nodeId: repeatedEvent.nodeId ?? firstEvent?.nodeId ?? null,
+    activeWindowSecondsAtRepeat: activeWindowSeconds,
+    firstSeen: {
+      ingestedAtMs: bigintToStringOrNull(firstSeenAtMs),
+      timestampIso: epochMsToIso(firstSeenAtMs),
+      eventTimeMs: bigintToStringOrNull(firstEventTimeMs),
+      eventTimeIso: epochMsToIso(firstEventTimeMs),
+      arrivalLatencyMs: bigintToStringOrNull(firstSeenLatencyMs),
+    },
+    repeatedSeen: {
+      ingestedAtMs: bigintToStringOrNull(repeatedSeenAtMs),
+      timestampIso: epochMsToIso(repeatedSeenAtMs),
+      eventTimeMs: bigintToStringOrNull(repeatedEventTimeMs),
+      eventTimeIso: epochMsToIso(repeatedEventTimeMs),
+      arrivalLatencyMs: bigintToStringOrNull(repeatedSeenLatencyMs),
+    },
+    seenGapMs: bigintToStringOrNull(seenGapMs),
+    seenGapExceedsActiveWindowAtRepeat:
+      seenGapMs !== null ? seenGapMs > activeWindowMs : null,
+  };
+}
+
+function toBigIntOrNull(value: unknown): bigint | null {
+  if (typeof value === "bigint") {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return BigInt(Math.trunc(value));
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    return BigInt(value);
+  }
+  return null;
+}
+
+function bigintToStringOrNull(value: bigint | null): string | null {
+  return value === null ? null : value.toString();
+}
+
+function epochMsToIso(value: bigint | null): string | null {
+  return value === null ? null : new Date(Number(value)).toISOString();
 }
 
 function serializeError(error: unknown): JsonRecord {

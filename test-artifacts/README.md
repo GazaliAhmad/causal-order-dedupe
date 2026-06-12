@@ -1,9 +1,11 @@
 # Test Artifects
 
-This tracked folder contains sanitized snapshots of the two validated `8h` runtime runs used in the repo guides:
+This tracked folder contains sanitized snapshots of the long-run runtime evidence currently referenced in the repo guides:
 
 - `expected-production-3way-mesh-standard-8h-postfix-baseline`
 - `expected-production-3way-mesh-heavy-duplicates-8h-postfix`
+- `break-the-wire-standard-8h`
+- `break-the-wire-high-latency-8h-rerun`
 
 Each run folder includes:
 
@@ -12,7 +14,8 @@ Each run folder includes:
 - `lifecycle.ndjson`: lifecycle events for collector and node completion
 - `anomalies.sample.ndjson`: the first `200` anomaly records from the raw run for inspection without checking in the full multi-megabyte anomaly stream
 
-See [comparison.md](./comparison.md) for the tracked `standard` vs `heavy-duplicates` comparison notes.
+See [comparison.md](./comparison.md) for the tracked `expected-production-3way-mesh` `standard` vs `heavy-duplicates` comparison notes.
+See [break-the-wire-comparison.md](./break-the-wire-comparison.md) for the tracked `break-the-wire` `standard` vs `high-latency` comparison notes.
 
 ## Safety
 

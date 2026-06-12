@@ -4,9 +4,17 @@ Deduplication support for `causal-order` event streams.
 
 ## Version Notice
 
-Published versions `1.0.2` through `1.0.5` are deprecated due to a config-adherence bug in runtime dedupe behavior. In those affected versions, the active dedupe window and cleanup behavior may not honor configured values correctly under runtime conditions.
+Published versions `1.0.1` through `1.0.5` are deprecated due to a config-adherence bug in runtime dedupe behavior. In those affected versions, the active dedupe window and cleanup behavior may not honor configured values correctly under runtime conditions.
+
+Version `1.0.0` was published and immediately deprecated because `LICENSE.md` was accidentally excluded from the npm package. Version `1.0.3` was never published to npm.
 
 Use `1.0.6` or later.
+
+ `1.0.6` fixes the config-adherence bug and adds `getStats()` for lightweight runtime insights on dedupe activity and state. The gateway also supports `updateWindow(seconds)` for runtime window adjustment and `destroy()` for clearing cache and resetting stats when needed.
+
+*Current release note:*
+
+- `1.0.7` - Adds duplicate-leak diagnostics for fresh deployment-style runtime runs, persists `duplicate-leaks.ndjson` beside the other run artifacts, and adds the `summary:duplicates` inspection helper for operator workflows.
 
 ## Relationship to [causal-order](https://www.npmjs.com/package/causal-order)
 

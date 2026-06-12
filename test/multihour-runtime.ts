@@ -369,6 +369,7 @@ function createSummary(runtime: JsonRecord): JsonRecord {
       summaryPath: null,
       heartbeatPath: null,
       anomalyPath: null,
+      duplicateLeakPath: null,
       lifecyclePath: null,
       configPath: null,
     },
@@ -444,6 +445,7 @@ function prepareRunArtifacts(runtime: JsonRecord, summary: JsonRecord): void {
   summary.artifacts.summaryPath = artifactPaths.summaryPath;
   summary.artifacts.heartbeatPath = artifactPaths.heartbeatPath;
   summary.artifacts.anomalyPath = artifactPaths.anomalyPath;
+  summary.artifacts.duplicateLeakPath = artifactPaths.duplicateLeakPath;
   summary.artifacts.lifecyclePath = artifactPaths.lifecyclePath;
   summary.artifacts.configPath = artifactPaths.configPath;
 }
@@ -462,6 +464,7 @@ function buildArtifactPaths(runtime: JsonRecord): JsonRecord {
     summaryPath: explicitSummaryPath ?? resolve(runDir, "summary.json"),
     heartbeatPath: resolve(runDir, "heartbeats.ndjson"),
     anomalyPath: resolve(runDir, "anomalies.ndjson"),
+    duplicateLeakPath: resolve(runDir, "duplicate-leaks.ndjson"),
     lifecyclePath: resolve(runDir, "lifecycle.ndjson"),
     configPath: resolve(runDir, "run-config.json"),
   };

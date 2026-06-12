@@ -16,7 +16,8 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.0.6` is the current working fix line:
+- Version `1.0.7` is the current operator-diagnostics line:
+  - `1.0.7` is now published to npm
   - first-class preset support exists in `DedupeGateway`
   - default mode behaves as `standard`
   - config-file driven setup now exists for dedupe configuration
@@ -27,13 +28,16 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - repo-side run comparison now includes a reusable `summary:compare` command
   - lightweight runtime stats now exist through `DedupeGateway#getStats()`
   - fresh deployment-style runtime artifacts now persist dedupe stats
+  - duplicate-leak diagnostics now persist in fresh deployment-style runtime artifacts
+  - repo-side duplicate inspection now includes a reusable `summary:duplicates` command
 - Current repo-side operator workflow now also includes:
   - a three-way equilibrium model for reading runs through correctness, pressure, and backlog together
   - lightweight package-facing runtime stats through `DedupeGateway#getStats()`
   - persisted dedupe stats in fresh deployment-style runtime artifacts and reports
+  - persisted duplicate-leak diagnostics with timing and active-window context for leak inspection
   - config-adherence checks that can invalidate a run when the live dedupe behavior drifts below the configured floor
   - wall-clock runtime results should be treated as baseline-worthy only when they come from the fixed dedupe implementation
-  - tracked sanitized inspection snapshots under `test-artifects/` for the validated `8h` mesh baseline and comparison
+  - tracked sanitized inspection snapshots under `test-artifacts/` for the validated `8h` mesh baseline and comparison
   - a now-validated `expected-production-3way-mesh` operator conclusion: `standard` is the cleaner default baseline, `heavy-duplicates` is a situational alternate, and manual tuning is fallback-only rather than the expected next step for that profile
 
 ---
@@ -92,7 +96,8 @@ Released scope:
   - `summary:report` now prints dedupe stats directly
 - These metrics now support safer tuning rather than guesswork.
 - Fixed runtime config-adherence so the active dedupe window now respects the configured floor and the runtime harness now honors cleanup settings from config files.
-- Established that published versions `1.0.2` through `1.0.5` are flawed for config-faithful runtime tuning and should be deprecated in npm.
+- Established that published versions `1.0.1` through `1.0.5` are flawed for config-faithful runtime tuning and should be deprecated in npm.
+- Separately, version `1.0.0` was published and immediately deprecated because `LICENSE.md` was accidentally excluded from the npm package, and version `1.0.3` was never published to npm.
 - Future wall-clock baseline and comparison results should be written only from the fixed dedupe line.
 - Completed package-facing equilibrium framing in deployment guidance as a lightweight interpretation aid.
 - Repo-side operator guidance continues to treat run evaluation as a three-way equilibrium:
@@ -104,7 +109,23 @@ Released scope:
   - `standard` remains the cleaner default baseline
   - `heavy-duplicates` is healthy, but not a meaningful enough win to replace `standard`
   - manual raw tuning is not required for that profile from current evidence
-- Completed tracked sanitized evidence snapshots under `test-artifects/` so readers can inspect the `8h` baseline and comparison without checking in full raw local run directories.
+- Completed tracked sanitized evidence snapshots under `test-artifacts/` so readers can inspect the `8h` baseline and comparison without checking in full raw local run directories.
+
+## v1.0.7
+
+- Completed the next operator-visibility step without introducing a new tuning model.
+- Published `v1.0.7` to npm as the current release line.
+- Kept the release aligned with the roadmap principle to expose enough runtime visibility for operators to validate behavior in production.
+- Completed duplicate-leak diagnostics for fresh deployment-style runtime runs.
+- Persisted `duplicate-leaks.ndjson` beside the other run artifacts.
+- Captured first-seen and repeated-seen timing for leaked duplicate IDs.
+- Captured arrival-gap and active-window context so operators can judge whether a replay likely outran the live dedupe window.
+- Completed a dedicated `summary:duplicates` helper for readable duplicate-leak inspection.
+- Made older pre-instrumentation runs report that diagnostics are unavailable instead of implying a clean “no leaks” result.
+- This release stays intentionally diagnostic-first:
+  - it improves operator evidence for duplicate leakage under stress
+  - it does not yet change the underlying dedupe or final-drain behavior
+- Completed validation for this scope through fresh duplicate-leak instrumentation and inspection workflows rather than a new tuning contract.
 
 ## v1.1.0
 
@@ -113,6 +134,7 @@ Released scope:
   - named presets are in place
   - config-file driven setup is available
   - basic runtime stats are exposed
+  - duplicate-leak diagnostics are available for fresh runtime runs
   - the operator workflow is documented clearly in the README
 - The intent of `v1.1.0` is to mark the point where the package feels like an operational product, not just a low-level dedupe helper.
 

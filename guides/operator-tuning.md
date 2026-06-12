@@ -168,7 +168,7 @@ The `2026-06-10` post-fix `8h` wall-clock baseline for `expected-production-3way
 
 Treat this as the current trustworthy long-run baseline for that exact profile and preset pair because the dedupe validation and the run-level verdict agreed.
 
-Tracked inspection files for this run live under [test-artifects/expected-production-3way-mesh-standard-8h-postfix-baseline](../test-artifects/expected-production-3way-mesh-standard-8h-postfix-baseline), including `summary.json`, `run-config.json`, `lifecycle.ndjson`, and a sampled `anomalies.sample.ndjson`.
+Tracked inspection files for this run live under [test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline](../test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline), including `summary.json`, `run-config.json`, `lifecycle.ndjson`, and a sampled `anomalies.sample.ndjson`.
 
 Validated `8h` comparison result against `heavy-duplicates`:
 
@@ -203,7 +203,76 @@ Operational conclusion for this profile:
 - it is not a meaningful enough win to replace `standard` as the cleaner default baseline
 - the current architecture already looks healthy for this tested `8h` production-like mesh shape
 
-Tracked inspection files for the comparison live under [test-artifects](../test-artifects) and are summarized in [comparison.md](../test-artifects/comparison.md).
+Tracked inspection files for the comparison live under [test-artifacts](../test-artifacts) and are summarized in [comparison.md](../test-artifacts/comparison.md).
+
+## Current `break-the-wire` `8h` Finding
+
+The repo's validated `8h` comparison for `break-the-wire` now shows a clear preset winner:
+
+```bash
+npm run test:runtime -- --duration 8h --profile-file profiles/break-the-wire.json --dedupe-preset standard --run-name break-the-wire-standard-8h
+```
+
+The `2026-06-11` `8h` `standard` run completed with:
+
+- `Verdict: PASS WITH STRESS`
+- `Status: completed`
+- `Assessment: degraded`
+- `activeWindowSeconds: 300s`, which stayed within the configured `standard` `180s..300s` range and hit the live max
+- `acceptedEvents: 1385180`
+- `droppedDuplicates: 9080` out of `23008` injected duplicates
+- `error-level anomalies: 7`, all `duplicate_event`
+- `late_arrival: 854449` of `1385180` delivered events, about `62%`
+- `queue max: 5132`
+- `peak dedupe cache: 19015 ids`
+- `peak RSS: 63.4MB`
+
+Important nuance from the follow-up inspection:
+
+- all `7` duplicate-event errors clustered in the final drain just before collector shutdown rather than appearing steadily throughout the run
+- that pattern is more consistent with very-late replay leakage than with a constant mid-run correctness failure
+- the original `2026-06-11` run predates `duplicate-leaks.ndjson`, so it cannot show first-seen versus repeated-seen timing for those exact leaked IDs
+
+The validated rerun with `high-latency` was:
+
+```bash
+npm run test:runtime -- --duration 8h --profile-file profiles/break-the-wire.json --dedupe-preset high-latency --run-name break-the-wire-high-latency-8h-rerun
+```
+
+The `2026-06-12` rerun completed with:
+
+- `Verdict: PASS WITH STRESS`
+- `Status: completed`
+- `Assessment: degraded`
+- `activeWindowSeconds: 480s`, matching the configured `high-latency` floor exactly
+- `acceptedEvents: 1373079`
+- `droppedDuplicates: 23266` out of `23266` injected duplicates
+- `error-level anomalies: 0`
+- `late_arrival: 841253` of `1373079` delivered events, about `61%`
+- `queue max: 5155`
+- `peak dedupe cache: 30226 ids`
+- `peak RSS: 66.6MB`
+
+Direct `summary:compare` reading against `standard`:
+
+- duplicate leakage improved from `13928/23008 (60.54%)` to `0/23266 (0.00%)`
+- error-level anomalies improved from `7` to `0`
+- late ratio improved from `61.69%` to `61.27%`
+- queue peak rose only slightly from `5132` to `5155`
+- peak RSS rose by `3.1MB`
+
+Duplicate-leak diagnostics for the completed rerun reported:
+
+- `Duplicate leaks: none observed`
+
+Operational conclusion for this profile:
+
+- `standard` is not clean enough for `break-the-wire` because duplicate-related correctness trouble leaked through
+- `high-latency` is the preferred preset for `break-the-wire` because it removed duplicate leakage and error-level anomalies while keeping the run config-valid
+- the remaining `PASS WITH STRESS` reading is now driven by extreme lateness and backlog pressure rather than dedupe correctness
+- manual tuning is not justified yet because the preset already solved the correctness gate cleanly
+
+Tracked inspection files for this comparison live under [test-artifacts](/abs/path/c:/dev/causal-order-dedupe/test-artifacts) and are summarized in [break-the-wire-comparison.md](/abs/path/c:/dev/causal-order-dedupe/test-artifacts/break-the-wire-comparison.md).
 
 Example baseline run:
 
@@ -409,6 +478,7 @@ Use `high-latency` when:
 - the network is expected to deliver events very late
 - long tails are normal
 - you need a wider memory window than `standard`
+- and for `break-the-wire` specifically, because the validated `8h` comparison showed it removes duplicate leakage that `standard` did not
 
 Use `cross-node-busy` when:
 
