@@ -6,6 +6,10 @@ This tracked folder contains sanitized snapshots of the long-run runtime evidenc
 - `expected-production-3way-mesh-heavy-duplicates-8h-postfix`
 - `break-the-wire-standard-8h`
 - `break-the-wire-high-latency-8h-rerun`
+- `expected-production-mesh-standard-1h-n5-wallclock`
+- `expected-production-mesh-standard-1h-n8-wallclock`
+- `expected-production-mesh-standard-8h-n8-wallclock`
+- `expected-production-mesh-standard-12h-n8-wallclock`
 
 Each run folder includes:
 
@@ -14,8 +18,11 @@ Each run folder includes:
 - `lifecycle.ndjson`: lifecycle events for collector and node completion
 - `anomalies.sample.ndjson`: the first `200` anomaly records from the raw run for inspection without checking in the full multi-megabyte anomaly stream
 
-See [comparison.md](./comparison.md) for the tracked `expected-production-3way-mesh` `standard` vs `heavy-duplicates` comparison notes.
-See [break-the-wire-comparison.md](./break-the-wire-comparison.md) for the tracked `break-the-wire` `standard` vs `high-latency` comparison notes.
+See [comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/comparison.md) for the tracked `expected-production-3way-mesh` `standard` vs `heavy-duplicates` comparison notes.
+See [break-the-wire-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/break-the-wire-comparison.md) for the tracked `break-the-wire` `standard` vs `high-latency` comparison notes.
+See [expected-production-mesh-1h-n5-n8-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-mesh-1h-n5-n8-comparison.md) for the tracked `expected-production-mesh` `n=5` vs `n=8` wall-clock comparison notes.
+See [expected-production-mesh-1h-8h-n8-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-mesh-1h-8h-n8-comparison.md) for the tracked `expected-production-mesh` `n=8` `1h` vs `8h` endurance comparison notes.
+See [expected-production-mesh-8h-12h-n8-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-mesh-8h-12h-n8-comparison.md) for the tracked `expected-production-mesh` `n=8` `8h` vs `12h` endurance comparison notes.
 
 ## Safety
 

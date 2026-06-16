@@ -9,6 +9,7 @@ import {
   formatDuration,
   randomBetween,
   randomInt,
+  resolveConfiguredNodeRateShare,
   sampleIntervalMs,
   serializeEventForWire,
   sleepForSimulatedGap,
@@ -408,9 +409,13 @@ function resolveNodeRate(phase: string): number {
       profile.phaseRates.chaosJitterMin,
       profile.phaseRates.chaosJitterMax,
     );
-  const nodeBias = profile.nodeWeights[nodeId] ?? 1;
+  const nodeShare = resolveConfiguredNodeRateShare(
+    config.nodeIds,
+    profile.nodeWeights,
+    nodeId,
+  );
   const totalRate = phase === "steady" ? steadyTotalRate : chaosTotalRate;
-  return Math.max(0.25, (totalRate * nodeBias) / 2);
+  return Math.max(0.25, totalRate * nodeShare);
 }
 
 function sampleDeliveryDelayMs(phase: string): bigint {

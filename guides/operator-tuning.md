@@ -168,7 +168,7 @@ The `2026-06-10` post-fix `8h` wall-clock baseline for `expected-production-3way
 
 Treat this as the current trustworthy long-run baseline for that exact profile and preset pair because the dedupe validation and the run-level verdict agreed.
 
-Tracked inspection files for this run live under [test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline](../test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline), including `summary.json`, `run-config.json`, `lifecycle.ndjson`, and a sampled `anomalies.sample.ndjson`.
+Tracked inspection files for this run live under [test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline/summary.json), including `summary.json`, `run-config.json`, `lifecycle.ndjson`, and a sampled `anomalies.sample.ndjson`.
 
 Validated `8h` comparison result against `heavy-duplicates`:
 
@@ -203,7 +203,7 @@ Operational conclusion for this profile:
 - it is not a meaningful enough win to replace `standard` as the cleaner default baseline
 - the current architecture already looks healthy for this tested `8h` production-like mesh shape
 
-Tracked inspection files for the comparison live under [test-artifacts](../test-artifacts) and are summarized in [comparison.md](../test-artifacts/comparison.md).
+Tracked inspection files for the comparison live under [test-artifacts](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/README.md) and are summarized in [comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/comparison.md).
 
 ## Current `break-the-wire` `8h` Finding
 
@@ -272,7 +272,7 @@ Operational conclusion for this profile:
 - the remaining `PASS WITH STRESS` reading is now driven by extreme lateness and backlog pressure rather than dedupe correctness
 - manual tuning is not justified yet because the preset already solved the correctness gate cleanly
 
-Tracked inspection files for this comparison live under [test-artifacts](/abs/path/c:/dev/causal-order-dedupe/test-artifacts) and are summarized in [break-the-wire-comparison.md](/abs/path/c:/dev/causal-order-dedupe/test-artifacts/break-the-wire-comparison.md).
+Tracked inspection files for this comparison live under [test-artifacts](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/README.md) and are summarized in [break-the-wire-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/break-the-wire-comparison.md).
 
 Example baseline run:
 

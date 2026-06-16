@@ -1,7 +1,15 @@
 {
   "name": "@causal-order/dedupe",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Deduplication support for causal-order event streams.",
+  "keywords": [
+    "causal-order",
+    "dedupe",
+    "deduplication",
+    "event-streams",
+    "stream-processing",
+    "idempotency"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -33,6 +41,7 @@
     "publish:dist": "npm run prepare:dist && npm publish ./publish-dist --access public",
     "test:presets": "npm run build && node .build/test/preset-contract.js",
     "test:runtime-config": "npm run build && node .build/test/runtime-config-contract.js",
+    "test:runtime-topology": "npm run build && node .build/test/runtime-topology-contract.js",
     "test:runtime": "npm run build && node .build/test/deployment-runtime.js",
     "summary:latest": "npm run build && node .build/test/latest-summary.js",
     "summary:report": "npm run build && node .build/test/summarize-run.js",
@@ -41,6 +50,9 @@
   },
   "dependencies": {
     "causal-order": "^1.0.0"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
   },
   "devDependencies": {
     "@types/node": "^25.9.2",
