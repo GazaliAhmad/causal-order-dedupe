@@ -105,7 +105,7 @@ Options:
 - `maxSlidingWindowSeconds`: hard upper bound for dynamic window growth, default `300`
 - `autoCleanup`: whether lightweight automatic cleanup runs during filtering, default `true`
 - `autoCleanupIntervalSeconds`: minimum interval between automatic cleanup passes, default `30`
-- `nowProvider` or `now_provider`: function that returns the current time in milliseconds, compatible with `BigInt`
+- `nowProvider`: function that returns the current time in milliseconds, compatible with `BigInt`
 
 `slidingWindowSeconds` controls how long the dedupe layer remembers an accepted event identity before automatic or manual cleanup can evict it. If the same event arrives again while that identity is still cached, it is dropped as a duplicate. Once the identity ages out, the event can be accepted again.
 

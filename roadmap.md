@@ -153,14 +153,27 @@ Released scope:
 
 ## v1.1.0
 
-- Treat this as the first operator-ready milestone for `@causal-order/dedupe`.
-- Expected scope:
+- Treat this as the next operator-resilience milestone after the published `1.0.8` topology-validation release.
+- Completed operator-ready baseline before this milestone:
   - named presets are in place
   - config-file driven setup is available
   - basic runtime stats are exposed
   - duplicate-leak diagnostics are available for fresh runtime runs
-  - the operator workflow is documented clearly in the README
-- The intent of `v1.1.0` is to mark the point where the package feels like an operational product, not just a low-level dedupe helper.
+  - the operator workflow is documented clearly in the README and guides
+- Expanded runtime-fault scope for this milestone:
+  - added explicit dark-node fault injection through runtime flags instead of relying only on partition-like delay approximation
+  - added explicit jitter-node fault injection so selected nodes can stay connected while behaving like unstable links
+  - added runtime validation for dark-node and jitter-node configuration, including overlap rejection and invalid-range rejection
+  - added lifecycle and summary reporting for dark-window counts, reconnect counts, connection-open counts, jitter-delay counts, and fault-state transitions
+  - added the `expected-production-mesh-dark-jitter` profile for expanded single-cluster resilience testing
+- Stability gate before declaring `v1.1.0` complete:
+  - complete a `12h` wall-clock resilience soak with long offline windows and reconnect behavior
+  - finish with `status=completed` and no worker or collector crashes
+  - preserve clean correctness signals, especially no duplicate leakage and no error-level anomaly regression
+  - keep dedupe behavior config-valid throughout the soak
+  - confirm that lifecycle and summary artifacts reflect the expected dark and reconnect behavior
+- Until that soak passes, treat `v1.1.0` as implemented but not yet stable for the combined package-and-harness release story.
+- The intent of `v1.1.0` is to move the package from operator-ready baseline into operator-ready resilience testing, especially for mobile, edge, and intermittently connected participant scenarios.
 
 ## Longer Term
 

@@ -70,6 +70,14 @@ process.once("SIGINT", () => {
 process.once("SIGTERM", () => {
   state.stopRequested = true;
 });
+process.once("uncaughtException", (error) => {
+  process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  process.exitCode = 1;
+});
+process.once("unhandledRejection", (reason) => {
+  process.stderr.write(`${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}\n`);
+  process.exitCode = 1;
+});
 
 let socket: ReturnType<typeof createConnection> | null = null;
 let pendingBuffer = "";
@@ -520,7 +528,23 @@ function findNextActionAtMs(
 }
 
 function sendMessage(message: JsonRecord): void {
-  socket?.write(`${JSON.stringify(message)}\n`);
+  const activeSocket = socket;
+  if (
+    !activeSocket ||
+    activeSocket.destroyed ||
+    !activeSocket.writable ||
+    activeSocket.writableEnded
+  ) {
+    return;
+  }
+
+  try {
+    activeSocket.write(`${JSON.stringify(message)}\n`);
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
 }
 
 function log(message: string): void {
@@ -612,14 +636,32 @@ function syncDarkState(now: bigint): void {
   if (nextDarkState) {
     state.darkActive = true;
     state.darkWindowsEntered += 1;
-    sendMessage({
-      type: "fault_state",
-      nodeId,
-      state: "dark_start",
-    });
-    socket?.end();
+    const activeSocket = socket;
     socket = null;
     pendingBuffer = "";
+
+    if (
+      activeSocket &&
+      !activeSocket.destroyed &&
+      activeSocket.writable &&
+      !activeSocket.writableEnded
+    ) {
+      try {
+        activeSocket.write(
+          `${JSON.stringify({
+            type: "fault_state",
+            nodeId,
+            state: "dark_start",
+          })}\n`,
+        );
+      } catch (error) {
+        process.stderr.write(
+          `${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      }
+      activeSocket.end();
+    }
+
     log(`[sim ${formatDuration(now - clock.simulatedStartMs)}] dark_start`);
     return;
   }
