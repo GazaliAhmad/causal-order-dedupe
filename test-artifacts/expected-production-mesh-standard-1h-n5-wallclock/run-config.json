@@ -1,0 +1,101 @@
+{
+  "durationMs": "3600000",
+  "steadyForMs": "1080000",
+  "eventsPerSecond": 18,
+  "chaosMultiplier": 1.6,
+  "batchSize": 200,
+  "maxLateArrivalMs": "60000",
+  "maxTailDrainMs": "300000",
+  "lateArrivalPolicy": "flag",
+  "reportEveryMs": "30000",
+  "timeScale": 1,
+  "dedupeConfig": {
+    "preset": "standard"
+  },
+  "outputPath": null,
+  "outputDir": "artifacts/runs",
+  "runName": "expected-production-mesh-standard-1h-n5-wallclock",
+  "sampleLimit": 20,
+  "maxLateArrivalSamples": 200,
+  "strict": false,
+  "allowUnknownOrder": true,
+  "detectAnomalies": true,
+  "tieBreaker": "ingestion_order",
+  "nodeIds": [
+    "edge-a",
+    "edge-b",
+    "edge-c",
+    "edge-d",
+    "edge-e"
+  ],
+  "workloadProfile": {
+    "name": "expected-production-mesh",
+    "description": "Production-like mesh workload profile for single-cluster topology validation.",
+    "nodeWeights": {
+      "edge-a": 1,
+      "edge-b": 1,
+      "edge-c": 1,
+      "edge-d": 1,
+      "edge-e": 1
+    },
+    "phaseRates": {
+      "steadyEventsPerSecond": 18,
+      "chaosMultiplier": 1.6,
+      "chaosJitterMin": 0.95,
+      "chaosJitterMax": 1.15
+    },
+    "dependencies": {
+      "steadySameNodeChance": 0.2,
+      "steadyCrossNodeChance": 0.6,
+      "chaoticSameNodeChance": 0.1,
+      "chaoticCrossNodeChance": 0.8,
+      "sameNodeParentChance": 0.3,
+      "crossNodeParentChance": 0.85
+    },
+    "duplicates": {
+      "steadyChance": 0.001,
+      "chaoticChance": 0.008
+    },
+    "ordering": {
+      "steadyPreserveOrderChance": 0.995,
+      "chaoticPreserveOrderChance": 0.92
+    },
+    "delays": {
+      "steady": {
+        "baseMinMs": 15,
+        "baseMaxMs": 90,
+        "spikeChance": 0.02,
+        "spikeMinMs": 180,
+        "spikeMaxMs": 700
+      },
+      "chaotic": {
+        "baseMinMs": 30,
+        "baseMaxMs": 180,
+        "slowSpikeChance": 0.06,
+        "slowSpikeMinMs": 800,
+        "slowSpikeMaxMs": 4000,
+        "lateSpikeChance": 0.01,
+        "lateSpikeMinMs": 6000,
+        "lateSpikeMaxMs": 20000,
+        "extremeSpikeChance": 0.002,
+        "extremeSpikeMinMs": 30000,
+        "extremeSpikeMaxMs": 90000
+      }
+    }
+  },
+  "profileSource": "profiles\\expected-production-mesh.json",
+  "wallStartMs": 1781270294114,
+  "artifacts": {
+    "runDir": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock",
+    "summaryPath": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\summary.json",
+    "heartbeatPath": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\heartbeats.ndjson",
+    "anomalyPath": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\anomalies.ndjson",
+    "duplicateLeakPath": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\duplicate-leaks.ndjson",
+    "lifecyclePath": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\lifecycle.ndjson",
+    "configPath": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\run-config.json",
+    "orchestratorLogPath": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\orchestrator.log",
+    "collectorStdoutPath": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\collector.stdout.log",
+    "collectorStderrPath": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\collector.stderr.log",
+    "nodesDir": "artifacts\\runs\\2026-06-12T13-18-14Z-expected-production-mesh-standard-1h-n5-wallclock\\nodes"
+  }
+}

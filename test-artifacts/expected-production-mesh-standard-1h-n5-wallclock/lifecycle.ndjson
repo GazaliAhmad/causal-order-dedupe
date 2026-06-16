@@ -1,0 +1,12 @@
+{"timestampIso":"2026-06-12T13:18:12.197Z","event":"collector_ready","wallElapsedMs":-1917,"simulatedElapsedMs":"0","port":60521}
+{"timestampIso":"2026-06-12T13:18:12.285Z","event":"node_connected","wallElapsedMs":-1829,"simulatedElapsedMs":"0","nodeId":"edge-a"}
+{"timestampIso":"2026-06-12T13:18:12.291Z","event":"node_connected","wallElapsedMs":-1823,"simulatedElapsedMs":"0","nodeId":"edge-b"}
+{"timestampIso":"2026-06-12T13:18:12.300Z","event":"node_connected","wallElapsedMs":-1814,"simulatedElapsedMs":"0","nodeId":"edge-d"}
+{"timestampIso":"2026-06-12T13:18:12.305Z","event":"node_connected","wallElapsedMs":-1809,"simulatedElapsedMs":"0","nodeId":"edge-c"}
+{"timestampIso":"2026-06-12T13:18:12.310Z","event":"node_connected","wallElapsedMs":-1804,"simulatedElapsedMs":"0","nodeId":"edge-e"}
+{"timestampIso":"2026-06-12T14:18:14.161Z","event":"node_completed","wallElapsedMs":3600047,"simulatedElapsedMs":"3600047","nodeId":"edge-e","stats":{"generated":19045,"sent":19181,"duplicatesInjected":136,"sameNodeDependencies":2294,"crossNodeDependencies":14477,"remoteHintsReceived":76058,"maxPendingQueueDepth":503}}
+{"timestampIso":"2026-06-12T14:18:15.751Z","event":"node_completed","wallElapsedMs":3601637,"simulatedElapsedMs":"3601637","nodeId":"edge-a","stats":{"generated":19344,"sent":19481,"duplicatesInjected":137,"sameNodeDependencies":2299,"crossNodeDependencies":14755,"remoteHintsReceived":75764,"maxPendingQueueDepth":527}}
+{"timestampIso":"2026-06-12T14:18:37.788Z","event":"node_completed","wallElapsedMs":3623674,"simulatedElapsedMs":"3623674","nodeId":"edge-b","stats":{"generated":19182,"sent":19332,"duplicatesInjected":150,"sameNodeDependencies":2328,"crossNodeDependencies":14616,"remoteHintsReceived":76204,"maxPendingQueueDepth":492}}
+{"timestampIso":"2026-06-12T14:18:50.469Z","event":"node_completed","wallElapsedMs":3636355,"simulatedElapsedMs":"3636355","nodeId":"edge-c","stats":{"generated":18962,"sent":19086,"duplicatesInjected":124,"sameNodeDependencies":2246,"crossNodeDependencies":14451,"remoteHintsReceived":76704,"maxPendingQueueDepth":540}}
+{"timestampIso":"2026-06-12T14:18:59.631Z","event":"node_completed","wallElapsedMs":3645517,"simulatedElapsedMs":"3645517","nodeId":"edge-d","stats":{"generated":19298,"sent":19435,"duplicatesInjected":137,"sameNodeDependencies":2418,"crossNodeDependencies":14609,"remoteHintsReceived":76533,"maxPendingQueueDepth":494}}
+{"timestampIso":"2026-06-12T14:18:59.653Z","event":"collector_finished","wallElapsedMs":3645539,"simulatedElapsedMs":"3645539","status":"completed"}
