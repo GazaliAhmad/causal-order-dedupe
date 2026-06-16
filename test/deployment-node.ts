@@ -34,6 +34,10 @@ const config = deserializeConfig(JSON.parse(rawConfig) as JsonRecord) as Runtime
 const clock = createSimulationClock(config);
 const hlc = createHlcClock({ nodeId, now: clock.simulationNowMs });
 const profile = config.workloadProfile;
+const faultInjection = config.faultInjection;
+const isDarkNode = faultInjection.darkNodeIds.includes(nodeId);
+const darkNodeIndex = faultInjection.darkNodeIds.indexOf(nodeId);
+const isJitterNode = faultInjection.jitterNodeIds.includes(nodeId);
 
 const state = {
   sequence: 0n,
@@ -52,6 +56,12 @@ const state = {
   recentRemote: [] as HintEvent[],
   flowCounter: 0,
   entityCounter: 0,
+  darkActive: false,
+  darkWindowsEntered: 0,
+  reconnects: 0,
+  connectionOpens: 0,
+  jitterExtraDelaysApplied: 0,
+  jitterSpikeDelaysApplied: 0,
 };
 
 process.once("SIGINT", () => {
@@ -61,46 +71,18 @@ process.once("SIGTERM", () => {
   state.stopRequested = true;
 });
 
-const socket = createConnection({
-  host: "127.0.0.1",
-  port: collectorPort,
-});
-socket.setEncoding("utf8");
-
+let socket: ReturnType<typeof createConnection> | null = null;
 let pendingBuffer = "";
-socket.on("data", (chunk) => {
-  pendingBuffer += chunk;
-  const lines = pendingBuffer.split("\n");
-  pendingBuffer = lines.pop() ?? "";
-  for (const line of lines) {
-    if (!line.trim()) {
-      continue;
-    }
-    const message = JSON.parse(line) as JsonRecord;
-    if (message.type === "peer_event") {
-      state.remoteHintsReceived += 1;
-      state.recentRemote.push(deserializeHintFromWire(message.event));
-      if (state.recentRemote.length > 128) {
-        state.recentRemote.shift();
-      }
-    }
-  }
-});
+let connectionPromise: Promise<void> | null = null;
 
-socket.on("error", (error) => {
-  process.stderr.write(`${error.message}\n`);
-  process.exitCode = 1;
-});
+if (shouldBeDark(clock.simulationNowMs())) {
+  state.darkActive = true;
+  state.darkWindowsEntered = 1;
+}
 
-await new Promise<void>((resolveOpen, rejectOpen) => {
-  socket.once("connect", () => resolveOpen());
-  socket.once("error", rejectOpen);
-});
-
-sendMessage({
-  type: "hello",
-  nodeId,
-});
+if (!state.darkActive) {
+  await ensureConnected();
+}
 
 log(`node started on port ${collectorPort}`);
 
@@ -108,9 +90,15 @@ const pending: Array<{ event: SimulationEvent; sendAtMs: bigint }> = [];
 
 while (true) {
   const now = clock.simulationNowMs();
+  syncDarkState(now);
+
+  if (!state.darkActive && !socket) {
+    await ensureConnected();
+  }
+
   const inMainWindow = now < clock.simulatedEndMs && !state.stopRequested;
 
-  if (inMainWindow) {
+  if (inMainWindow && !state.darkActive) {
     scheduleDueEvents(now, pending);
   }
 
@@ -123,7 +111,11 @@ while (true) {
   }
 
   let sentAny = false;
-  while (pending[0] && pending[0].sendAtMs <= clock.simulationNowMs()) {
+  while (
+    socket &&
+    pending[0] &&
+    pending[0].sendAtMs <= clock.simulationNowMs()
+  ) {
     const delivery = pending.shift()!;
     sendMessage({
       type: "event",
@@ -171,21 +163,30 @@ while (true) {
   );
 }
 
+if (!socket) {
+  state.darkActive = false;
+  await ensureConnected();
+}
+
 sendMessage({
   type: "complete",
   nodeId,
   stats: {
-    generated: state.generated,
+      generated: state.generated,
     sent: state.sent,
     duplicatesInjected: state.duplicatesInjected,
     sameNodeDependencies: state.sameNodeDependencies,
-    crossNodeDependencies: state.crossNodeDependencies,
-    remoteHintsReceived: state.remoteHintsReceived,
-    maxPendingQueueDepth: state.maxPendingQueueDepth,
-  },
-});
-
-socket.end();
+      crossNodeDependencies: state.crossNodeDependencies,
+      remoteHintsReceived: state.remoteHintsReceived,
+      maxPendingQueueDepth: state.maxPendingQueueDepth,
+      darkWindowsEntered: state.darkWindowsEntered,
+      reconnects: state.reconnects,
+      connectionOpens: state.connectionOpens,
+      jitterExtraDelaysApplied: state.jitterExtraDelaysApplied,
+      jitterSpikeDelaysApplied: state.jitterSpikeDelaysApplied,
+    },
+  });
+socket?.end();
 log(
   [
     "node complete",
@@ -434,7 +435,7 @@ function sampleDeliveryDelayMs(phase: string): bigint {
         ),
       );
     }
-    return delayMs;
+    return applyJitterDelay(delayMs);
   }
 
   let delayMs = BigInt(
@@ -467,7 +468,7 @@ function sampleDeliveryDelayMs(phase: string): bigint {
       ),
     );
   }
-  return delayMs;
+  return applyJitterDelay(delayMs);
 }
 
 function pickRecentEvent<T>(history: T[]): T {
@@ -519,9 +520,170 @@ function findNextActionAtMs(
 }
 
 function sendMessage(message: JsonRecord): void {
-  socket.write(`${JSON.stringify(message)}\n`);
+  socket?.write(`${JSON.stringify(message)}\n`);
 }
 
 function log(message: string): void {
   process.stdout.write(`${message}\n`);
+}
+
+async function ensureConnected(): Promise<void> {
+  if (socket || state.stopRequested || state.darkActive) {
+    return;
+  }
+
+  if (connectionPromise) {
+    await connectionPromise;
+    return;
+  }
+
+  const pendingConnection = (async () => {
+    const nextSocket = createConnection({
+      host: "127.0.0.1",
+      port: collectorPort,
+    });
+    nextSocket.setEncoding("utf8");
+
+    nextSocket.on("data", (chunk) => {
+      pendingBuffer += chunk;
+      const lines = pendingBuffer.split("\n");
+      pendingBuffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) {
+          continue;
+        }
+        const message = JSON.parse(line) as JsonRecord;
+        if (message.type === "peer_event") {
+          state.remoteHintsReceived += 1;
+          state.recentRemote.push(deserializeHintFromWire(message.event));
+          if (state.recentRemote.length > 128) {
+            state.recentRemote.shift();
+          }
+        }
+      }
+    });
+
+    nextSocket.on("error", (error) => {
+      process.stderr.write(`${error.message}\n`);
+    });
+
+    nextSocket.on("close", () => {
+      if (socket === nextSocket) {
+        socket = null;
+        pendingBuffer = "";
+      }
+    });
+
+    await new Promise<void>((resolveOpen, rejectOpen) => {
+      nextSocket.once("connect", () => resolveOpen());
+      nextSocket.once("error", rejectOpen);
+    });
+
+    if (state.darkActive || state.stopRequested) {
+      nextSocket.end();
+      return;
+    }
+
+    socket = nextSocket;
+    state.connectionOpens += 1;
+    sendMessage({
+      type: "hello",
+      nodeId,
+    });
+  })();
+
+  connectionPromise = pendingConnection;
+  try {
+    await pendingConnection;
+  } finally {
+    if (connectionPromise === pendingConnection) {
+      connectionPromise = null;
+    }
+  }
+}
+
+function syncDarkState(now: bigint): void {
+  const nextDarkState = shouldBeDark(now);
+
+  if (nextDarkState === state.darkActive) {
+    return;
+  }
+
+  if (nextDarkState) {
+    state.darkActive = true;
+    state.darkWindowsEntered += 1;
+    sendMessage({
+      type: "fault_state",
+      nodeId,
+      state: "dark_start",
+    });
+    socket?.end();
+    socket = null;
+    pendingBuffer = "";
+    log(`[sim ${formatDuration(now - clock.simulatedStartMs)}] dark_start`);
+    return;
+  }
+
+  state.darkActive = false;
+  state.reconnects += 1;
+  pendingBuffer = "";
+  void ensureConnected()
+    .then(() => {
+      sendMessage({
+        type: "fault_state",
+        nodeId,
+        state: "dark_end",
+      });
+    })
+    .catch((error) => {
+      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.exitCode = 1;
+    });
+  log(`[sim ${formatDuration(now - clock.simulatedStartMs)}] dark_end`);
+}
+
+function shouldBeDark(now: bigint): boolean {
+  if (!isDarkNode || faultInjection.darkDurationMs <= 0n) {
+    return false;
+  }
+
+  const firstDarkStartMs =
+    clock.simulatedStartMs +
+    faultInjection.darkStartAfterMs +
+    faultInjection.darkStaggerMs * BigInt(Math.max(0, darkNodeIndex));
+
+  if (now < firstDarkStartMs) {
+    return false;
+  }
+
+  const elapsedSinceFirstDarkMs = now - firstDarkStartMs;
+  return elapsedSinceFirstDarkMs % faultInjection.darkIntervalMs <
+    faultInjection.darkDurationMs;
+}
+
+function applyJitterDelay(delayMs: bigint): bigint {
+  if (!isJitterNode) {
+    return delayMs;
+  }
+
+  let adjustedDelayMs = delayMs;
+  adjustedDelayMs += sampleConfiguredDelay(
+    faultInjection.jitterExtraDelayMinMs,
+    faultInjection.jitterExtraDelayMaxMs,
+  );
+  state.jitterExtraDelaysApplied += 1;
+
+  if (Math.random() < faultInjection.jitterSpikeChance) {
+    adjustedDelayMs += sampleConfiguredDelay(
+      faultInjection.jitterSpikeMinMs,
+      faultInjection.jitterSpikeMaxMs,
+    );
+    state.jitterSpikeDelaysApplied += 1;
+  }
+
+  return adjustedDelayMs;
+}
+
+function sampleConfiguredDelay(minMs: bigint, maxMs: bigint): bigint {
+  return BigInt(randomInt(Number(minMs), Number(maxMs)));
 }

@@ -59,6 +59,140 @@ function run(): void {
     /--node-ids must include at least one node ID/,
   );
 
+  const faultInjectedRuntimeConfig = buildConfig([
+    "--node-ids",
+    "edge-a,edge-b,edge-c,edge-d,edge-e,edge-f",
+    "--dark-nodes",
+    "edge-b,edge-e",
+    "--dark-interval",
+    "20m",
+    "--dark-duration",
+    "4m",
+    "--dark-start-after",
+    "12m",
+    "--dark-stagger",
+    "5m",
+    "--jitter-nodes",
+    "edge-c,edge-f",
+    "--jitter-extra-delay-min",
+    "150ms",
+    "--jitter-extra-delay-max",
+    "900ms",
+    "--jitter-spike-chance",
+    "0.2",
+    "--jitter-spike-min",
+    "2s",
+    "--jitter-spike-max",
+    "9s",
+  ]);
+  assert.ok(!("help" in faultInjectedRuntimeConfig));
+  assert.deepEqual(faultInjectedRuntimeConfig.faultInjection.darkNodeIds, [
+    "edge-b",
+    "edge-e",
+  ]);
+  assert.equal(faultInjectedRuntimeConfig.faultInjection.darkIntervalMs, 1_200_000n);
+  assert.equal(faultInjectedRuntimeConfig.faultInjection.darkDurationMs, 240_000n);
+  assert.equal(
+    faultInjectedRuntimeConfig.faultInjection.darkStartAfterMs,
+    720_000n,
+  );
+  assert.equal(faultInjectedRuntimeConfig.faultInjection.darkStaggerMs, 300_000n);
+  assert.deepEqual(faultInjectedRuntimeConfig.faultInjection.jitterNodeIds, [
+    "edge-c",
+    "edge-f",
+  ]);
+  assert.equal(
+    faultInjectedRuntimeConfig.faultInjection.jitterExtraDelayMinMs,
+    150n,
+  );
+  assert.equal(
+    faultInjectedRuntimeConfig.faultInjection.jitterExtraDelayMaxMs,
+    900n,
+  );
+  assert.equal(faultInjectedRuntimeConfig.faultInjection.jitterSpikeChance, 0.2);
+  assert.equal(faultInjectedRuntimeConfig.faultInjection.jitterSpikeMinMs, 2_000n);
+  assert.equal(faultInjectedRuntimeConfig.faultInjection.jitterSpikeMaxMs, 9_000n);
+
+  assert.throws(
+    () =>
+      buildConfig([
+        "--node-ids",
+        "edge-a,edge-b,edge-c",
+        "--dark-nodes",
+        "edge-z",
+      ]),
+    /--dark-nodes cannot include unknown node ID "edge-z"/,
+  );
+
+  assert.throws(
+    () =>
+      buildConfig([
+        "--node-ids",
+        "edge-a,edge-b,edge-c",
+        "--jitter-nodes",
+        "edge-z",
+      ]),
+    /--jitter-nodes cannot include unknown node ID "edge-z"/,
+  );
+
+  assert.throws(
+    () =>
+      buildConfig([
+        "--node-ids",
+        "edge-a,edge-b,edge-c",
+        "--dark-nodes",
+        "edge-b",
+        "--jitter-nodes",
+        "edge-b",
+      ]),
+    /Fault injection node "edge-b" cannot be both dark and jitter-prone in the same run/,
+  );
+
+  assert.throws(
+    () =>
+      buildConfig([
+        "--node-ids",
+        "edge-a,edge-b,edge-c",
+        "--dark-nodes",
+        "edge-b",
+        "--dark-interval",
+        "3m",
+        "--dark-duration",
+        "5m",
+      ]),
+    /--dark-duration cannot be greater than --dark-interval/,
+  );
+
+  assert.throws(
+    () =>
+      buildConfig([
+        "--node-ids",
+        "edge-a,edge-b,edge-c",
+        "--jitter-nodes",
+        "edge-c",
+        "--jitter-extra-delay-min",
+        "2s",
+        "--jitter-extra-delay-max",
+        "1s",
+      ]),
+    /--jitter-extra-delay-min cannot be greater than --jitter-extra-delay-max/,
+  );
+
+  assert.throws(
+    () =>
+      buildConfig([
+        "--node-ids",
+        "edge-a,edge-b,edge-c",
+        "--jitter-nodes",
+        "edge-c",
+        "--jitter-spike-min",
+        "5s",
+        "--jitter-spike-max",
+        "2s",
+      ]),
+    /--jitter-spike-min cannot be greater than --jitter-spike-max/,
+  );
+
   const defaultNodeShareSum = [...DEFAULT_SINGLE_CLUSTER_NODE_IDS]
     .map((nodeId) =>
       resolveConfiguredNodeRateShare(
@@ -72,7 +206,7 @@ function run(): void {
       ),
     )
     .reduce((total, share) => total + share, 0);
-  assert.equal(defaultNodeShareSum, 1);
+  assert.ok(Math.abs(defaultNodeShareSum - 1) < 1e-12);
 
   const weightedNodeIds = ["edge-a", "edge-b", "edge-c", "edge-d", "edge-e"];
   const weightedNodeWeights = {
@@ -91,7 +225,7 @@ function run(): void {
       ),
     )
     .reduce((total, share) => total + share, 0);
-  assert.equal(weightedShareSum, 1);
+  assert.ok(Math.abs(weightedShareSum - 1) < 1e-12);
 
   const fallbackWeightShare = resolveConfiguredNodeRateShare(
     ["edge-a", "edge-z"],

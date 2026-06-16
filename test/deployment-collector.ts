@@ -196,6 +196,14 @@ function handleMessage(socket: Socket, message: JsonRecord): void {
       }
       return;
 
+    case "fault_state":
+      countInto(summary.transport.faultEventsByType, message.state ?? "unknown");
+      appendLifecycleEvent("node_fault_state", {
+        nodeId: message.nodeId,
+        state: message.state ?? "unknown",
+      }).catch(() => {});
+      return;
+
     default:
       log(`unknown message type: ${message.type}`);
   }
@@ -440,6 +448,21 @@ function createSummary(): JsonRecord {
       detectAnomalies: config.detectAnomalies,
       tieBreaker: config.tieBreaker,
       nodeIds: config.nodeIds,
+      faultInjection: {
+        darkNodeIds: config.faultInjection.darkNodeIds,
+        darkIntervalMs: config.faultInjection.darkIntervalMs.toString(),
+        darkDurationMs: config.faultInjection.darkDurationMs.toString(),
+        darkStartAfterMs: config.faultInjection.darkStartAfterMs.toString(),
+        darkStaggerMs: config.faultInjection.darkStaggerMs.toString(),
+        jitterNodeIds: config.faultInjection.jitterNodeIds,
+        jitterExtraDelayMinMs:
+          config.faultInjection.jitterExtraDelayMinMs.toString(),
+        jitterExtraDelayMaxMs:
+          config.faultInjection.jitterExtraDelayMaxMs.toString(),
+        jitterSpikeChance: config.faultInjection.jitterSpikeChance,
+        jitterSpikeMinMs: config.faultInjection.jitterSpikeMinMs.toString(),
+        jitterSpikeMaxMs: config.faultInjection.jitterSpikeMaxMs.toString(),
+      },
       model: "deployment_local_tcp",
       profileName: config.workloadProfile?.name ?? "unknown",
       profileDescription: config.workloadProfile?.description ?? "",
@@ -459,6 +482,7 @@ function createSummary(): JsonRecord {
       peerHintsBroadcast: 0,
       nodeStats: {} as Record<string, JsonRecord>,
       persistedLateArrivals: 0,
+      faultEventsByType: {} as Record<string, number>,
     },
     stream: {
       batches: 0,
@@ -497,6 +521,11 @@ function finalizeSummary(): void {
     remoteHintsReceived: sumBy(nodeStats, "remoteHintsReceived"),
     maxPendingQueueDepth: maxBy(nodeStats, "maxPendingQueueDepth"),
     maxQueueDepth: maxBy(nodeStats, "maxPendingQueueDepth"),
+    darkWindowsEntered: sumBy(nodeStats, "darkWindowsEntered"),
+    reconnects: sumBy(nodeStats, "reconnects"),
+    connectionOpens: sumBy(nodeStats, "connectionOpens"),
+    jitterExtraDelaysApplied: sumBy(nodeStats, "jitterExtraDelaysApplied"),
+    jitterSpikeDelaysApplied: sumBy(nodeStats, "jitterSpikeDelaysApplied"),
   };
   summary.timing.finishedAtIso = new Date().toISOString();
   summary.timing.wallElapsedMs = Date.now() - config.wallStartMs;

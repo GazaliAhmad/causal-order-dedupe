@@ -75,6 +75,20 @@ export interface RuntimeArtifacts {
   nodesDir: string;
 }
 
+export interface FaultInjectionConfig {
+  darkNodeIds: string[];
+  darkIntervalMs: bigint;
+  darkDurationMs: bigint;
+  darkStartAfterMs: bigint;
+  darkStaggerMs: bigint;
+  jitterNodeIds: string[];
+  jitterExtraDelayMinMs: bigint;
+  jitterExtraDelayMaxMs: bigint;
+  jitterSpikeChance: number;
+  jitterSpikeMinMs: bigint;
+  jitterSpikeMaxMs: bigint;
+}
+
 export type HybridClock = HlcTimestamp & Record<string, unknown>;
 
 export interface EventPayload {
@@ -121,6 +135,7 @@ export interface RuntimeConfig {
   tieBreaker: string;
   dedupeConfig: DedupeGatewayFileConfig;
   nodeIds: string[];
+  faultInjection: FaultInjectionConfig;
   workloadProfile: WorkloadProfile;
   profileSource: string | null;
   wallStartMs?: number;
@@ -209,6 +224,17 @@ export const DEFAULTS = {
   nodeIds: [...DEFAULT_SINGLE_CLUSTER_NODE_IDS],
   profile: DEFAULT_WORKLOAD_PROFILE.name,
   profileFile: null as string | null,
+  darkNodeIds: [] as string[],
+  darkIntervalMs: parseDurationToMs("25m"),
+  darkDurationMs: parseDurationToMs("4m"),
+  darkStartAfterMs: parseDurationToMs("10m"),
+  darkStaggerMs: parseDurationToMs("3m"),
+  jitterNodeIds: [] as string[],
+  jitterExtraDelayMinMs: parseDurationToMs("75ms"),
+  jitterExtraDelayMaxMs: parseDurationToMs("1200ms"),
+  jitterSpikeChance: 0.08,
+  jitterSpikeMinMs: parseDurationToMs("3s"),
+  jitterSpikeMaxMs: parseDurationToMs("12s"),
 };
 
 export const HELP_TEXT = `Usage:
@@ -229,6 +255,17 @@ Options:
   --dedupe-preset <value>      standard | heavy-duplicates | high-latency | cross-node-busy. Default: standard
   --dedupe-config <path>       JSON file with either a preset or explicit sliding/max windows
   --node-ids <csv>             Comma-separated node IDs for one single-cluster run. Default: edge-a,edge-b,edge-c
+  --dark-nodes <csv>           Nodes that periodically disconnect and reconnect
+  --dark-interval <value>      Time between repeated dark windows. Default: 25m
+  --dark-duration <value>      Length of each dark window. Default: 4m
+  --dark-start-after <value>   Delay before the first dark window. Default: 10m
+  --dark-stagger <value>       Extra offset applied between dark nodes. Default: 3m
+  --jitter-nodes <csv>         Nodes that stay up but receive extra transport jitter
+  --jitter-extra-delay-min <value>  Minimum extra delay added to jitter nodes. Default: 75ms
+  --jitter-extra-delay-max <value>  Maximum extra delay added to jitter nodes. Default: 1200ms
+  --jitter-spike-chance <0..1> Chance of an additional jitter spike on jitter nodes. Default: 0.08
+  --jitter-spike-min <value>   Minimum extra jitter spike delay. Default: 3s
+  --jitter-spike-max <value>   Maximum extra jitter spike delay. Default: 12s
   --output <path>              Explicit summary JSON path
   --output-dir <path>          Base directory for run artifacts. Default: artifacts/runs
   --run-name <value>           Optional label appended to the run folder name
@@ -270,6 +307,7 @@ export function buildConfig(argv: string[]): RuntimeConfig | { help: true } {
     resolvedProfile,
     resolvedNodeIds,
   );
+  const faultInjection = resolveFaultInjectionConfig(parsed, resolvedNodeIds);
 
   return {
     durationMs,
@@ -297,6 +335,7 @@ export function buildConfig(argv: string[]): RuntimeConfig | { help: true } {
     detectAnomalies: parsed.detectAnomalies ?? DEFAULTS.detectAnomalies,
     tieBreaker: DEFAULTS.tieBreaker,
     nodeIds: resolvedNodeIds,
+    faultInjection,
     workloadProfile: alignedWorkloadProfile,
     profileSource: parsed.profileFile
       ? resolve(parsed.profileFile)
@@ -393,6 +432,53 @@ function parseArgs(argv: string[]) {
         result.nodeIds = parseNodeIds(requireValue(rawKey, value), rawKey);
         index += inlineValue === undefined ? 1 : 0;
         break;
+      case "--dark-nodes":
+        result.darkNodeIds = parseNodeIds(requireValue(rawKey, value), rawKey);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--dark-interval":
+        result.darkIntervalMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--dark-duration":
+        result.darkDurationMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--dark-start-after":
+        result.darkStartAfterMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--dark-stagger":
+        result.darkStaggerMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--jitter-nodes":
+        result.jitterNodeIds = parseNodeIds(requireValue(rawKey, value), rawKey);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--jitter-extra-delay-min":
+        result.jitterExtraDelayMinMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--jitter-extra-delay-max":
+        result.jitterExtraDelayMaxMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--jitter-spike-chance":
+        result.jitterSpikeChance = parseUnitInterval(
+          requireValue(rawKey, value),
+          rawKey,
+        );
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--jitter-spike-min":
+        result.jitterSpikeMinMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--jitter-spike-max":
+        result.jitterSpikeMaxMs = parseDurationToMs(requireValue(rawKey, value));
+        index += inlineValue === undefined ? 1 : 0;
+        break;
       case "--output":
         result.outputPath = requireValue(rawKey, value);
         index += inlineValue === undefined ? 1 : 0;
@@ -454,6 +540,76 @@ function resolveRuntimeDedupeConfig(
 
   return {
     preset: parsed.dedupePreset ?? DEFAULTS.dedupePreset,
+  };
+}
+
+function resolveFaultInjectionConfig(
+  parsed: Record<string, any>,
+  nodeIds: string[],
+): FaultInjectionConfig {
+  const darkNodeIds = parsed.darkNodeIds ?? [...DEFAULTS.darkNodeIds];
+  const jitterNodeIds = parsed.jitterNodeIds ?? [...DEFAULTS.jitterNodeIds];
+  const activeNodeIdSet = new Set(nodeIds);
+
+  for (const nodeId of darkNodeIds) {
+    if (!activeNodeIdSet.has(nodeId)) {
+      throw new Error(`--dark-nodes cannot include unknown node ID "${nodeId}"`);
+    }
+  }
+
+  for (const nodeId of jitterNodeIds) {
+    if (!activeNodeIdSet.has(nodeId)) {
+      throw new Error(`--jitter-nodes cannot include unknown node ID "${nodeId}"`);
+    }
+  }
+
+  for (const nodeId of darkNodeIds) {
+    if (jitterNodeIds.includes(nodeId)) {
+      throw new Error(
+        `Fault injection node "${nodeId}" cannot be both dark and jitter-prone in the same run`,
+      );
+    }
+  }
+
+  const darkIntervalMs = parsed.darkIntervalMs ?? DEFAULTS.darkIntervalMs;
+  const darkDurationMs = parsed.darkDurationMs ?? DEFAULTS.darkDurationMs;
+  const darkStartAfterMs = parsed.darkStartAfterMs ?? DEFAULTS.darkStartAfterMs;
+  const darkStaggerMs = parsed.darkStaggerMs ?? DEFAULTS.darkStaggerMs;
+  const jitterExtraDelayMinMs =
+    parsed.jitterExtraDelayMinMs ?? DEFAULTS.jitterExtraDelayMinMs;
+  const jitterExtraDelayMaxMs =
+    parsed.jitterExtraDelayMaxMs ?? DEFAULTS.jitterExtraDelayMaxMs;
+  const jitterSpikeChance =
+    parsed.jitterSpikeChance ?? DEFAULTS.jitterSpikeChance;
+  const jitterSpikeMinMs = parsed.jitterSpikeMinMs ?? DEFAULTS.jitterSpikeMinMs;
+  const jitterSpikeMaxMs = parsed.jitterSpikeMaxMs ?? DEFAULTS.jitterSpikeMaxMs;
+
+  if (darkDurationMs > darkIntervalMs) {
+    throw new Error("--dark-duration cannot be greater than --dark-interval");
+  }
+
+  if (jitterExtraDelayMinMs > jitterExtraDelayMaxMs) {
+    throw new Error(
+      "--jitter-extra-delay-min cannot be greater than --jitter-extra-delay-max",
+    );
+  }
+
+  if (jitterSpikeMinMs > jitterSpikeMaxMs) {
+    throw new Error("--jitter-spike-min cannot be greater than --jitter-spike-max");
+  }
+
+  return {
+    darkNodeIds,
+    darkIntervalMs,
+    darkDurationMs,
+    darkStartAfterMs,
+    darkStaggerMs,
+    jitterNodeIds,
+    jitterExtraDelayMinMs,
+    jitterExtraDelayMaxMs,
+    jitterSpikeChance,
+    jitterSpikeMinMs,
+    jitterSpikeMaxMs,
   };
 }
 
@@ -673,6 +829,17 @@ export function serializeConfig(config: RuntimeConfig): Record<string, unknown> 
     maxLateArrivalMs: config.maxLateArrivalMs.toString(),
     maxTailDrainMs: config.maxTailDrainMs.toString(),
     reportEveryMs: config.reportEveryMs.toString(),
+    faultInjection: {
+      ...config.faultInjection,
+      darkIntervalMs: config.faultInjection.darkIntervalMs.toString(),
+      darkDurationMs: config.faultInjection.darkDurationMs.toString(),
+      darkStartAfterMs: config.faultInjection.darkStartAfterMs.toString(),
+      darkStaggerMs: config.faultInjection.darkStaggerMs.toString(),
+      jitterExtraDelayMinMs: config.faultInjection.jitterExtraDelayMinMs.toString(),
+      jitterExtraDelayMaxMs: config.faultInjection.jitterExtraDelayMaxMs.toString(),
+      jitterSpikeMinMs: config.faultInjection.jitterSpikeMinMs.toString(),
+      jitterSpikeMaxMs: config.faultInjection.jitterSpikeMaxMs.toString(),
+    },
   };
 }
 
@@ -684,6 +851,21 @@ export function deserializeConfig(serialized: Record<string, any>): RuntimeConfi
     maxLateArrivalMs: BigInt(serialized.maxLateArrivalMs),
     maxTailDrainMs: BigInt(serialized.maxTailDrainMs),
     reportEveryMs: BigInt(serialized.reportEveryMs),
+    faultInjection: {
+      ...serialized.faultInjection,
+      darkIntervalMs: BigInt(serialized.faultInjection.darkIntervalMs),
+      darkDurationMs: BigInt(serialized.faultInjection.darkDurationMs),
+      darkStartAfterMs: BigInt(serialized.faultInjection.darkStartAfterMs),
+      darkStaggerMs: BigInt(serialized.faultInjection.darkStaggerMs),
+      jitterExtraDelayMinMs: BigInt(
+        serialized.faultInjection.jitterExtraDelayMinMs,
+      ),
+      jitterExtraDelayMaxMs: BigInt(
+        serialized.faultInjection.jitterExtraDelayMaxMs,
+      ),
+      jitterSpikeMinMs: BigInt(serialized.faultInjection.jitterSpikeMinMs),
+      jitterSpikeMaxMs: BigInt(serialized.faultInjection.jitterSpikeMaxMs),
+    },
   } as RuntimeConfig;
 }
 
