@@ -195,7 +195,7 @@ Safer first choices:
 
 For the repo's validated `expected-production-3way-mesh` `8h` wall-clock runs on `2026-06-10` to `2026-06-11`, `standard` remains the trustworthy starting point.
 The matching `heavy-duplicates` comparison also stayed healthy and honored its `300s` floor, but it did not improve duplicate leakage and it raised backlog and dedupe pressure enough that it still does not replace `standard` as the cleaner default for that profile.
-If you want to inspect the tracked evidence behind that conclusion, see [test-artifacts/comparison.md](../test-artifacts/comparison.md) and the paired run snapshots under [test-artifacts](../test-artifacts).
+If you want to inspect the tracked evidence behind that conclusion, see [test-artifacts/comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/comparison.md) and the paired run snapshots under [test-artifacts](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/README.md).
 
 For the repo's validated `break-the-wire` `8h` comparison on `2026-06-11` to `2026-06-12`, start with `{"preset":"high-latency"}` rather than manual raw values.
 That profile remained stressed under both presets, but `high-latency` eliminated duplicate leakage and error-level anomalies while `standard` did not, so there is no manual-tuning case yet.

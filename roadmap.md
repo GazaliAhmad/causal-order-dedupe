@@ -16,14 +16,13 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.0.7` is complete and published to npm.
-- `v1.0.8` is the active next release line.
-- Current `v1.0.8` focus:
-  - preserve the validated `3`-node path as the default baseline
-  - add an opt-in topology configuration path for larger single-cluster runs
-  - validate `n=5`, then `n=8`
-  - keep npm keyword/discoverability metadata work as a small secondary release item
-- Completed and already available from the published `1.0.7` line:
+- Version `1.0.8` is complete and published to npm as the current release line.
+- `v1.0.8` delivered:
+  - preserved the validated `3`-node path as the default baseline
+  - added an opt-in topology configuration path for larger single-cluster runs
+  - validated `n=5`, then `n=8`
+  - included npm keyword/discoverability metadata in the published manifest
+- Completed and already available from the published `1.0.8` line:
   - first-class preset support exists in `DedupeGateway`
   - default mode behaves as `standard`
   - config-file driven setup now exists for dedupe configuration
@@ -135,27 +134,22 @@ Released scope:
 
 ## v1.0.8
 
-- Treat this as a topology-validation release for the existing single-cluster runtime harness.
-- Primary goal:
-  - preserve the currently validated `3`-node path as the default and avoid destabilizing the existing baseline
-  - add an opt-in topology configuration path so larger single-cluster runs can be exercised without hardcoding new node counts into the default runtime flow
-- Required scope:
-  - keep the current `3`-node default behavior unchanged
-  - support opt-in single-cluster node-topology selection through configuration rather than repeated code edits
-  - use the new path to validate `n=5`, then `n=8`
-  - make the topology model extensible enough for later arbitrary `n` rather than only special-casing `5` and `8`
-- Guardrails:
-  - do not turn `v1.0.8` into multi-cluster orchestration yet
-  - do not introduce cluster federation or a super-engine in this release
-  - do not change dedupe semantics just to support higher node counts
-  - do not regress the validated `3`-node baseline
-- Secondary packaging scope:
-  - include the small npm metadata improvement for package discoverability in the same release
-  - keep that packaging work clearly secondary to the topology-validation goal
-  - preserve published-manifest alignment so package keywords survive the publish-dist flow
-- Intent:
-  - answer whether one `@causal-order/dedupe` + `causal-order` instance remains healthy as a single cluster grows beyond `3` nodes
-  - gather evidence for whether a later `@causal-order/cluster` package is actually needed, and if so, from what scale boundary
+- Completed the topology-validation release for the existing single-cluster runtime harness.
+- Completed primary release goals:
+  - preserved the validated `3`-node path as the default baseline
+  - added an opt-in topology configuration path so larger single-cluster runs can be exercised without hardcoding new node counts into the default runtime flow
+- Completed required scope:
+  - kept the current `3`-node default behavior unchanged
+  - supported opt-in single-cluster node-topology selection through configuration rather than repeated code edits
+  - used the new path to validate `n=5`, then `n=8`
+  - made the topology model extensible enough for later arbitrary `n` rather than only special-casing `5` and `8`
+- Completed packaging scope:
+  - included the npm metadata improvement for package discoverability in the same release
+  - preserved published-manifest alignment so package keywords survive the publish-dist flow
+- Completed evidence trail:
+  - validated `1h` `n=5 -> n=8` comparison evidence
+  - validated `8h` `n=8` endurance evidence
+  - preserved tracked operator evidence under `test-artifacts/`
 
 ## v1.1.0
 
@@ -174,3 +168,23 @@ Released scope:
 - Publish a short operator guide for choosing presets in practice.
 - Revisit preset defaults once real-world deployment data becomes available.
 - Keep manual raw timing as an escape hatch, but continue to prefer config-valid preset outcomes over hand-tuned windows when the validated workload evidence is already clean.
+- Explore a dedicated website project for `@causal-order/dedupe` once the package surface and operator story have settled.
+- Use an initial website stack built around:
+  - `Astro` for the site shell and static-first routing
+  - existing repo Markdown under `guides/` as the guides content source
+  - existing repo evidence under `test-artifacts/` as the artifacts and scenario source
+  - plain `Markdown` first, with `MDX` only if specific pages later need embedded live components
+  - `React` only for selective interactive islands such as simulators, inspectors, or comparison views
+  - `Tailwind CSS` or an equally light custom styling layer rather than a heavy UI framework
+  - `Cloudflare Pages` as the initial deployment target
+- Keep the website content model source-of-truth in this repo instead of duplicating docs into a second content tree:
+  - render `guides/` directly as the guides section
+  - reuse `test-artifacts/` directly for evidence, comparisons, and scenario pages
+- Favor a custom `Astro` site over a generic docs shell so the package can have a more distinctive visual identity than the current common landing-page patterns.
+- Treat interactive pieces as focused islands instead of turning the whole site into a heavy app:
+  - keep most pages static
+  - add small client-side components later for timelines, topology views, scenario inspectors, or artifact comparison widgets
+- Prefer an interactive visual simulator over a hosted terminal-first experience:
+  - simulate event ordering, duplicates, late arrivals, and replay behavior in the browser
+  - use simulated time by default so long-duration scenarios can be explored quickly
+  - keep the initial site Cloudflare-friendly by avoiding unnecessary server-side terminal infrastructure

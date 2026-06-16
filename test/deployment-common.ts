@@ -181,6 +181,12 @@ export const DEFAULT_WORKLOAD_PROFILE: WorkloadProfile = {
   },
 };
 
+export const DEFAULT_SINGLE_CLUSTER_NODE_IDS = Object.freeze([
+  "edge-a",
+  "edge-b",
+  "edge-c",
+] as const);
+
 export const DEFAULTS = {
   durationMs: parseDurationToMs("4h"),
   steadyRatio: 0.3,
@@ -200,7 +206,7 @@ export const DEFAULTS = {
   detectAnomalies: true,
   tieBreaker: "ingestion_order",
   dedupePreset: "standard" as DedupePreset,
-  nodeIds: ["edge-a", "edge-b", "edge-c"],
+  nodeIds: [...DEFAULT_SINGLE_CLUSTER_NODE_IDS],
   profile: DEFAULT_WORKLOAD_PROFILE.name,
   profileFile: null as string | null,
 };
@@ -212,7 +218,7 @@ Options:
   --duration <value>           Total simulated runtime. Supports ms, s, m, h. Default: 4h
   --steady-for <value>         Simulated steady phase duration before chaos begins
   --steady-ratio <0..1>        Portion of total duration spent steady when --steady-for is omitted
-  --events-per-second <n>      Average total steady-state throughput across both nodes. Default: 16
+  --events-per-second <n>      Average total steady-state throughput across the whole cluster. Default: 16
   --chaos-multiplier <n>       Multiplier applied during chaotic phase. Default: 1.8
   --batch-size <n>             orderEventStream batch size. Default: 200
   --max-late-arrival-ms <n>    Late-arrival window in milliseconds. Default: 60000
@@ -222,6 +228,7 @@ Options:
   --time-scale <n>             1 = realtime, 60 = one simulated minute per wall second
   --dedupe-preset <value>      standard | heavy-duplicates | high-latency | cross-node-busy. Default: standard
   --dedupe-config <path>       JSON file with either a preset or explicit sliding/max windows
+  --node-ids <csv>             Comma-separated node IDs for one single-cluster run. Default: edge-a,edge-b,edge-c
   --output <path>              Explicit summary JSON path
   --output-dir <path>          Base directory for run artifacts. Default: artifacts/runs
   --run-name <value>           Optional label appended to the run folder name
@@ -258,14 +265,20 @@ export function buildConfig(argv: string[]): RuntimeConfig | { help: true } {
     throw new Error("Steady phase must be between 0 and total duration");
   }
 
+  const resolvedNodeIds = parsed.nodeIds ?? [...DEFAULTS.nodeIds];
+  const alignedWorkloadProfile = alignWorkloadProfileToNodeIds(
+    resolvedProfile,
+    resolvedNodeIds,
+  );
+
   return {
     durationMs,
     steadyForMs,
     eventsPerSecond:
       parsed.eventsPerSecond ??
-      resolvedProfile.phaseRates.steadyEventsPerSecond,
+      alignedWorkloadProfile.phaseRates.steadyEventsPerSecond,
     chaosMultiplier:
-      parsed.chaosMultiplier ?? resolvedProfile.phaseRates.chaosMultiplier,
+      parsed.chaosMultiplier ?? alignedWorkloadProfile.phaseRates.chaosMultiplier,
     batchSize: parsed.batchSize ?? DEFAULTS.batchSize,
     maxLateArrivalMs: parsed.maxLateArrivalMs ?? DEFAULTS.maxLateArrivalMs,
     maxTailDrainMs: parsed.maxTailDrainMs ?? DEFAULTS.maxTailDrainMs,
@@ -283,12 +296,12 @@ export function buildConfig(argv: string[]): RuntimeConfig | { help: true } {
     allowUnknownOrder: parsed.allowUnknownOrder ?? DEFAULTS.allowUnknownOrder,
     detectAnomalies: parsed.detectAnomalies ?? DEFAULTS.detectAnomalies,
     tieBreaker: DEFAULTS.tieBreaker,
-    nodeIds: DEFAULTS.nodeIds,
-    workloadProfile: resolvedProfile,
+    nodeIds: resolvedNodeIds,
+    workloadProfile: alignedWorkloadProfile,
     profileSource: parsed.profileFile
       ? resolve(parsed.profileFile)
       : parsed.profile && parsed.profile !== DEFAULT_WORKLOAD_PROFILE.name
-        ? resolve(PROFILE_DIR, `${resolvedProfile.name}.json`)
+        ? resolve(PROFILE_DIR, `${alignedWorkloadProfile.name}.json`)
         : "built-in",
   };
 }
@@ -374,6 +387,10 @@ function parseArgs(argv: string[]) {
         break;
       case "--dedupe-config":
         result.dedupeConfigPath = requireValue(rawKey, value);
+        index += inlineValue === undefined ? 1 : 0;
+        break;
+      case "--node-ids":
+        result.nodeIds = parseNodeIds(requireValue(rawKey, value), rawKey);
         index += inlineValue === undefined ? 1 : 0;
         break;
       case "--output":
@@ -520,6 +537,27 @@ function parseDedupePreset(input: string, label: string): DedupePreset {
   return value;
 }
 
+function parseNodeIds(input: string, label: string): string[] {
+  const nodeIds = input
+    .split(",")
+    .map((nodeId) => nodeId.trim())
+    .filter((nodeId) => nodeId.length > 0);
+
+  if (nodeIds.length === 0) {
+    throw new Error(`${label} must include at least one node ID`);
+  }
+
+  const seen = new Set<string>();
+  for (const nodeId of nodeIds) {
+    if (seen.has(nodeId)) {
+      throw new Error(`${label} cannot include duplicate node ID "${nodeId}"`);
+    }
+    seen.add(nodeId);
+  }
+
+  return nodeIds;
+}
+
 export function formatDuration(milliseconds: number | bigint): string {
   if (typeof milliseconds === "bigint") {
     milliseconds = Number(milliseconds);
@@ -544,6 +582,43 @@ export function formatDuration(milliseconds: number | bigint): string {
     return `${seconds}s`;
   }
   return `${ms}ms`;
+}
+
+export function resolveConfiguredNodeRateShare(
+  nodeIds: string[],
+  nodeWeights: Record<string, number>,
+  nodeId: string,
+): number {
+  const activeNodeIds = nodeIds.length > 0 ? nodeIds : [nodeId];
+  let totalWeight = 0;
+
+  for (const activeNodeId of activeNodeIds) {
+    totalWeight += nodeWeights[activeNodeId] ?? 1;
+  }
+
+  if (!Number.isFinite(totalWeight) || totalWeight <= 0) {
+    return 1 / activeNodeIds.length;
+  }
+
+  return (nodeWeights[nodeId] ?? 1) / totalWeight;
+}
+
+function alignWorkloadProfileToNodeIds(
+  profile: WorkloadProfile,
+  nodeIds: string[],
+): WorkloadProfile {
+  const nodeWeights = { ...profile.nodeWeights };
+
+  for (const nodeId of nodeIds) {
+    if (!(nodeId in nodeWeights)) {
+      nodeWeights[nodeId] = 1;
+    }
+  }
+
+  return {
+    ...profile,
+    nodeWeights,
+  };
 }
 
 export function createRunLabel(wallStartMs: number, runName: string | null): string {

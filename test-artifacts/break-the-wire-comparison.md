@@ -2,8 +2,8 @@
 
 Compared runs:
 
-- [standard summary](/abs/path/c:/dev/causal-order-dedupe/test-artifacts/break-the-wire-standard-8h/summary.json)
-- [high-latency summary](/abs/path/c:/dev/causal-order-dedupe/test-artifacts/break-the-wire-high-latency-8h-rerun/summary.json)
+- [standard summary](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/break-the-wire-standard-8h/summary.json)
+- [high-latency summary](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/break-the-wire-high-latency-8h-rerun/summary.json)
 
 Source compare command:
 

@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.8]
+
+### Added
+
+- Added topology-size validation support through explicit `--node-ids` runtime configuration so larger single-cluster meshes can be tested without disturbing the validated default `n=3` baseline.
+- Added runtime validation coverage for topology overrides, including rejection of empty or duplicate node ID lists.
+- Added a focused runtime topology contract path so the deployment-style harness is exercised against larger node sets with per-node artifacts and summary validation.
+- Added the topology-neutral `profiles/expected-production-mesh.json` workload profile for single-cluster mesh validation where workload shape stays separate from the chosen node count.
+- Added a dedicated topology validation guide under `guides/` covering the `n=5` and `n=8` single-cluster workflow, interpretation rules, and the current evidence boundary before introducing a separate `/cluster` layer.
+- Added package keywords to the publish manifest so the npm package is easier to discover by dedupe, stream-processing, and idempotency-oriented searches.
+
+### Changed
+
+- Generalized deployment-style runtime spawning and workload alignment so topology now scales from the configured node list instead of relying on small fixed-node assumptions.
+- Updated node-rate allocation to distribute total cluster throughput across the active node set by weight instead of relying on a hard-coded small-node divisor.
+- Updated workload-profile alignment so missing configured node IDs inherit explicit default weights at runtime, keeping topology growth opt-in through `--node-ids`.
+- Updated repo documentation to treat topology validation as the primary `1.0.8` focus, with package metadata as a secondary release note.
+- Recorded the validated `1h` `expected-production-mesh + standard` comparison result: both `n=5` and `n=8` stayed healthy, and `n=8` was the stronger single-cluster result of the two for this tested workload shape.
+- Recorded the validated `8h` `expected-production-mesh + standard` `n=8` endurance result: the single-cluster runtime stayed healthy with zero duplicate leakage, zero error-level anomalies, controlled backlog, and low-pressure behavior over the longer wall-clock run.
+
 ## [1.0.7]
 
 ### Added

@@ -331,10 +331,10 @@ npm run test:runtime -- --duration 8h --profile-file profiles/expected-productio
 
 That `2026-06-10` wall-clock run completed with `PASS`, `Status: completed`, `Assessment: healthy`, `0` error-level anomalies, `activeWindowSeconds: 180s`, and duplicate suppression that matched the injected duplicate count exactly.
 Use it as a baseline only because the dedupe validation also stayed consistent with the configured `standard` preset.
-Readers who want the tracked evidence can inspect [test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline](../test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline).
+Readers who want the tracked evidence can inspect [test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline/summary.json).
 
 The matching `heavy-duplicates` `8h` comparison on `2026-06-10` to `2026-06-11` also completed with `PASS` and honored its configured `300s` window, but the comparison did not reveal a meaningful enough improvement to displace `standard` as the baseline for this profile.
-The tracked comparison snapshot is available at [test-artifacts/comparison.md](../test-artifacts/comparison.md).
+The tracked comparison snapshot is available at [test-artifacts/comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/comparison.md).
 
 ## How To Tune Toward Your Real Requirements
 

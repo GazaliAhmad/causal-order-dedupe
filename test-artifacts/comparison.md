@@ -2,8 +2,8 @@
 
 Compared runs:
 
-- [standard summary](./expected-production-3way-mesh-standard-8h-postfix-baseline/summary.json)
-- [heavy-duplicates summary](./expected-production-3way-mesh-heavy-duplicates-8h-postfix/summary.json)
+- [standard summary](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-3way-mesh-standard-8h-postfix-baseline/summary.json)
+- [heavy-duplicates summary](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-3way-mesh-heavy-duplicates-8h-postfix/summary.json)
 
 Source compare command:
 

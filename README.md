@@ -14,7 +14,7 @@ Use `1.0.6` or later.
 
 *Current release note:*
 
-- `1.0.7` - Adds duplicate-leak diagnostics for fresh deployment-style runtime runs, persists `duplicate-leaks.ndjson` beside the other run artifacts, and adds the `summary:duplicates` inspection helper for operator workflows.
+- `1.0.8` - Current stable release line.
 
 ## Relationship to [causal-order](https://www.npmjs.com/package/causal-order)
 
@@ -75,13 +75,16 @@ dedupe.cleanup();
 
 ## Operator Guide
 
-This repository includes additional operator and workload-profile guides for local development and evaluation workflows:
+Additional guides for deployment, configuration, troubleshooting, and runtime validation are available here:
 
 - [Deployment Guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/deployment.md)
 - [Building Dedupe Configs](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/building-dedupe-configs.md)
 - [Operator Guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/operator-tuning.md)
 - [Building Workload Profiles](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/building-workload-profiles.md)
+- [Topology Validation Guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/topology-validation.md)
 - [Operator Error Guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/operator-errors.md)
+
+Use the deployment guide for package integration, and use the operator, workload-profile, and topology guides when you want deeper guidance for runtime evaluation.
 
 ## Project Docs
 
