@@ -16,13 +16,13 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.0.8` is complete and published to npm as the current release line.
-- `v1.0.8` delivered:
+- Version `1.1.0` is complete and published to npm as the current release line.
+- `v1.0.8` delivered the topology-validation baseline that `v1.1.0` builds on:
   - preserved the validated `3`-node path as the default baseline
   - added an opt-in topology configuration path for larger single-cluster runs
   - validated `n=5`, then `n=8`
   - included npm keyword/discoverability metadata in the published manifest
-- Completed and already available from the published `1.0.8` line:
+- Completed and already available from the published `1.1.0` line:
   - first-class preset support exists in `DedupeGateway`
   - default mode behaves as `standard`
   - config-file driven setup now exists for dedupe configuration
@@ -44,6 +44,8 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - wall-clock runtime results should be treated as baseline-worthy only when they come from the fixed dedupe implementation
   - tracked sanitized inspection snapshots under `test-artifacts/` for the validated `8h` mesh baseline and comparison
   - a now-validated `expected-production-3way-mesh` operator conclusion: `standard` is the cleaner default baseline, `heavy-duplicates` is a situational alternate, and manual tuning is fallback-only rather than the expected next step for that profile
+  - released `v1.1.0` hostile-profile evidence: the tracked `expected-production-mesh-dark-jitter` `n=12` `4h` runs kept `@causal-order/dedupe` and `causal-order` correctness-safe with zero duplicate leakage and zero error-level anomalies, even while remaining intentionally high-pressure
+  - the hostile dark+jitter profile is now treated as a resilience-boundary check rather than a release track that still needs longer `8h` or `12h` repetition
 
 ---
 ## *History*
@@ -153,14 +155,30 @@ Released scope:
 
 ## v1.1.0
 
-- Treat this as the first operator-ready milestone for `@causal-order/dedupe`.
-- Expected scope:
+- Completed the operator-resilience milestone after the published `1.0.8` topology-validation release.
+- Completed operator-ready baseline before this milestone:
   - named presets are in place
   - config-file driven setup is available
   - basic runtime stats are exposed
   - duplicate-leak diagnostics are available for fresh runtime runs
-  - the operator workflow is documented clearly in the README
-- The intent of `v1.1.0` is to mark the point where the package feels like an operational product, not just a low-level dedupe helper.
+  - the operator workflow is documented clearly in the README and guides
+- Expanded runtime-fault scope for this milestone:
+  - added explicit dark-node fault injection through runtime flags instead of relying only on partition-like delay approximation
+  - added explicit jitter-node fault injection so selected nodes can stay connected while behaving like unstable links
+  - added runtime validation for dark-node and jitter-node configuration, including overlap rejection and invalid-range rejection
+  - added lifecycle and summary reporting for dark-window counts, reconnect counts, connection-open counts, jitter-delay counts, and fault-state transitions
+  - added the `expected-production-mesh-dark-jitter` profile for expanded single-cluster resilience testing
+- Completed release evidence for this milestone:
+  - validated hostile-profile `n=12` `4h` runs with explicit dark-node and jitter-node behavior
+  - preserved clean correctness signals, especially zero duplicate leakage and zero error-level anomalies
+  - kept dedupe behavior config-valid throughout the tracked runs
+  - confirmed that lifecycle and summary artifacts reflect the expected dark and reconnect behavior
+  - confirmed through the rejoin-aware follow-up that reconnect smoothing was not required to establish the current correctness conclusion
+- Released `v1.1.0` conclusion:
+  - `@causal-order/dedupe` and `causal-order` remained correctness-safe under the hostile `expected-production-mesh-dark-jitter` profile
+  - the profile remains intentionally severe and still produces `PASS WITH STRESS`, so it is better treated as a resilience-boundary scenario than as the default operating target
+  - further `8h` and `12h` repetition on that same hostile track is not required for the current release story
+- The intent of `v1.1.0` is to move the package from operator-ready baseline into operator-ready resilience testing, especially for mobile, edge, and intermittently connected participant scenarios.
 
 ## Longer Term
 

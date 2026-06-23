@@ -1,4 +1,4 @@
-# Test Artifects
+# Test Artifacts
 
 This tracked folder contains sanitized snapshots of the long-run runtime evidence currently referenced in the repo guides:
 
@@ -10,6 +10,10 @@ This tracked folder contains sanitized snapshots of the long-run runtime evidenc
 - `expected-production-mesh-standard-1h-n8-wallclock`
 - `expected-production-mesh-standard-8h-n8-wallclock`
 - `expected-production-mesh-standard-12h-n8-wallclock`
+- `fault-injection-1h-n12-wallclock`
+- `fault-injection-4h-n12-wallclock`
+- `fault-injection-4h-n12-wallclock-rejoin-aware`
+- `fault-injection-8h-n12-wallclock`
 
 Each run folder includes:
 
@@ -23,6 +27,11 @@ See [break-the-wire-comparison.md](https://github.com/GazaliAhmad/causal-order-d
 See [expected-production-mesh-1h-n5-n8-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-mesh-1h-n5-n8-comparison.md) for the tracked `expected-production-mesh` `n=5` vs `n=8` wall-clock comparison notes.
 See [expected-production-mesh-1h-8h-n8-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-mesh-1h-8h-n8-comparison.md) for the tracked `expected-production-mesh` `n=8` `1h` vs `8h` endurance comparison notes.
 See [expected-production-mesh-8h-12h-n8-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-mesh-8h-12h-n8-comparison.md) for the tracked `expected-production-mesh` `n=8` `8h` vs `12h` endurance comparison notes.
+See [fault-injection-1h-4h-n12-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/fault-injection-1h-4h-n12-comparison.md) for the tracked `fault-injection` `n=12` `1h` vs `4h` resilience comparison notes.
+See [fault-injection-4h-original-vs-rejoin-aware-n12-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/fault-injection-4h-original-vs-rejoin-aware-n12-comparison.md) for the tracked `fault-injection` `n=12` `4h` original vs `4h` rejoin-aware comparison notes.
+See [fault-injection-4h-8h-n12-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/fault-injection-4h-8h-n12-comparison.md) for the tracked `fault-injection` `n=12` `4h` vs `8h` resilience comparison notes.
+
+For released `1.1.0`, the hostile `expected-production-mesh-dark-jitter` evidence is treated as complete enough to establish the current resilience boundary: `@causal-order/dedupe` and `causal-order` stayed correctness-safe in the tracked `n=12` `4h` runs, while pressure remained intentionally severe. Based on that result, longer `8h` and `12h` repetition on the same hostile track is not part of the current release requirement.
 
 ## Safety
 

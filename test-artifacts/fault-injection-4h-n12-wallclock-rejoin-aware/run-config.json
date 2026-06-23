@@ -1,0 +1,140 @@
+{
+  "durationMs": "14400000",
+  "steadyForMs": "4320000",
+  "eventsPerSecond": 18,
+  "chaosMultiplier": 1.9,
+  "batchSize": 200,
+  "maxLateArrivalMs": "60000",
+  "maxTailDrainMs": "300000",
+  "lateArrivalPolicy": "flag",
+  "reportEveryMs": "30000",
+  "timeScale": 1,
+  "dedupeConfig": {
+    "preset": "high-latency"
+  },
+  "outputPath": null,
+  "outputDir": "artifacts/runs",
+  "runName": "fault-injection-4h-n12-wallclock-rejoin-aware",
+  "sampleLimit": 20,
+  "maxLateArrivalSamples": 200,
+  "strict": false,
+  "allowUnknownOrder": true,
+  "detectAnomalies": true,
+  "tieBreaker": "ingestion_order",
+  "nodeIds": [
+    "edge-a",
+    "edge-b",
+    "edge-c",
+    "edge-d",
+    "edge-e",
+    "edge-f",
+    "edge-g",
+    "edge-h",
+    "edge-i",
+    "edge-j",
+    "edge-k",
+    "edge-l"
+  ],
+  "faultInjection": {
+    "darkNodeIds": [
+      "edge-b",
+      "edge-f",
+      "edge-j"
+    ],
+    "darkIntervalMs": "1200000",
+    "darkDurationMs": "240000",
+    "darkStartAfterMs": "600000",
+    "darkStaggerMs": "300000",
+    "jitterNodeIds": [
+      "edge-c",
+      "edge-h"
+    ],
+    "jitterExtraDelayMinMs": "120",
+    "jitterExtraDelayMaxMs": "900",
+    "jitterSpikeChance": 0.2,
+    "jitterSpikeMinMs": "2000",
+    "jitterSpikeMaxMs": "8000"
+  },
+  "workloadProfile": {
+    "name": "expected-production-mesh-dark-jitter",
+    "description": "Production-like mesh workload with intermittent dark-node recovery bursts and a small set of jitter-prone links.",
+    "nodeWeights": {
+      "edge-a": 1,
+      "edge-b": 1,
+      "edge-c": 1,
+      "edge-d": 1,
+      "edge-e": 1,
+      "edge-f": 1,
+      "edge-g": 1,
+      "edge-h": 1,
+      "edge-i": 1,
+      "edge-j": 1,
+      "edge-k": 1,
+      "edge-l": 1
+    },
+    "phaseRates": {
+      "steadyEventsPerSecond": 18,
+      "chaosMultiplier": 1.9,
+      "chaosJitterMin": 0.8,
+      "chaosJitterMax": 1.3
+    },
+    "dependencies": {
+      "steadySameNodeChance": 0.18,
+      "steadyCrossNodeChance": 0.58,
+      "chaoticSameNodeChance": 0.08,
+      "chaoticCrossNodeChance": 0.78,
+      "sameNodeParentChance": 0.3,
+      "crossNodeParentChance": 0.9
+    },
+    "duplicates": {
+      "steadyChance": 0.002,
+      "chaoticChance": 0.014
+    },
+    "ordering": {
+      "steadyPreserveOrderChance": 0.99,
+      "chaoticPreserveOrderChance": 0.82
+    },
+    "delays": {
+      "steady": {
+        "baseMinMs": 15,
+        "baseMaxMs": 100,
+        "spikeChance": 0.03,
+        "spikeMinMs": 250,
+        "spikeMaxMs": 900
+      },
+      "chaotic": {
+        "baseMinMs": 40,
+        "baseMaxMs": 220,
+        "slowSpikeChance": 0.14,
+        "slowSpikeMinMs": 3000,
+        "slowSpikeMaxMs": 12000,
+        "lateSpikeChance": 0.06,
+        "lateSpikeMinMs": 20000,
+        "lateSpikeMaxMs": 90000,
+        "extremeSpikeChance": 0.02,
+        "extremeSpikeMinMs": 90000,
+        "extremeSpikeMaxMs": 210000
+      }
+    }
+  },
+  "profileSource": "profiles\\\\expected-production-mesh-dark-jitter.json",
+  "wallStartMs": 1782185471764,
+  "artifacts": {
+    "runDir": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware",
+    "summaryPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\summary.json",
+    "heartbeatPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\heartbeats.ndjson",
+    "anomalyPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\anomalies.ndjson",
+    "duplicateLeakPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\duplicate-leaks.ndjson",
+    "lifecyclePath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\lifecycle.ndjson",
+    "configPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\run-config.json",
+    "orchestratorLogPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\orchestrator.log",
+    "collectorStdoutPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\collector.stdout.log",
+    "collectorStderrPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\collector.stderr.log",
+    "nodesDir": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\nodes"
+  },
+  "rejoinShaping": {
+    "recoveryWindowMs": "360000",
+    "tokenRatePerSecond": 4,
+    "burstSize": 24
+  }
+}

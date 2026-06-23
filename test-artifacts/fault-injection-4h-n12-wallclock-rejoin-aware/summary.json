@@ -1,0 +1,524 @@
+{
+  "outcome": {
+    "status": "completed",
+    "failure": null
+  },
+  "artifacts": {
+    "runDir": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware",
+    "summaryPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\summary.json",
+    "heartbeatPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\heartbeats.ndjson",
+    "anomalyPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\anomalies.ndjson",
+    "duplicateLeakPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\duplicate-leaks.ndjson",
+    "lifecyclePath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\lifecycle.ndjson",
+    "configPath": "artifacts\\\\runs\\\\2026-06-23T03-31-11Z-fault-injection-4h-n12-wallclock-rejoin-aware\\\\run-config.json"
+  },
+  "config": {
+    "durationMs": "14400000",
+    "steadyForMs": "4320000",
+    "eventsPerSecond": 18,
+    "chaosMultiplier": 1.9,
+    "batchSize": 200,
+    "maxLateArrivalMs": "60000",
+    "maxTailDrainMs": "300000",
+    "lateArrivalPolicy": "flag",
+    "reportEveryMs": "30000",
+    "timeScale": 1,
+    "outputDir": "artifacts/runs",
+    "runName": "fault-injection-4h-n12-wallclock-rejoin-aware",
+    "strict": false,
+    "allowUnknownOrder": true,
+    "detectAnomalies": true,
+    "tieBreaker": "ingestion_order",
+    "nodeIds": [
+      "edge-a",
+      "edge-b",
+      "edge-c",
+      "edge-d",
+      "edge-e",
+      "edge-f",
+      "edge-g",
+      "edge-h",
+      "edge-i",
+      "edge-j",
+      "edge-k",
+      "edge-l"
+    ],
+    "faultInjection": {
+      "darkNodeIds": [
+        "edge-b",
+        "edge-f",
+        "edge-j"
+      ],
+      "darkIntervalMs": "1200000",
+      "darkDurationMs": "240000",
+      "darkStartAfterMs": "600000",
+      "darkStaggerMs": "300000",
+      "jitterNodeIds": [
+        "edge-c",
+        "edge-h"
+      ],
+      "jitterExtraDelayMinMs": "120",
+      "jitterExtraDelayMaxMs": "900",
+      "jitterSpikeChance": 0.2,
+      "jitterSpikeMinMs": "2000",
+      "jitterSpikeMaxMs": "8000"
+    },
+    "model": "deployment_local_tcp",
+    "profileName": "expected-production-mesh-dark-jitter",
+    "profileDescription": "Production-like mesh workload with intermittent dark-node recovery bursts and a small set of jitter-prone links.",
+    "profileSource": "profiles\\\\expected-production-mesh-dark-jitter.json"
+  },
+  "timing": {
+    "startedAtIso": "2026-06-23T03:31:11.764Z",
+    "finishedAtIso": "2026-06-23T07:36:28.56Z",
+    "wallElapsedMs": 14716796,
+    "simulatedElapsedMs": "14716796",
+    "interrupted": false
+  },
+  "transport": {
+    "receivedEvents": 431740,
+    "receivedByNode": {
+      "edge-g": 35918,
+      "edge-j": 35891,
+      "edge-b": 36424,
+      "edge-l": 36058,
+      "edge-k": 35877,
+      "edge-a": 36191,
+      "edge-i": 35740,
+      "edge-f": 35959,
+      "edge-d": 36005,
+      "edge-h": 35703,
+      "edge-c": 35804,
+      "edge-e": 36170
+    },
+    "connectedNodes": {
+      "edge-d": true,
+      "edge-a": true,
+      "edge-e": true,
+      "edge-c": true,
+      "edge-b": true,
+      "edge-j": true,
+      "edge-f": true,
+      "edge-h": true,
+      "edge-g": true,
+      "edge-i": true,
+      "edge-l": true,
+      "edge-k": true
+    },
+    "peerHintsBroadcast": 4710663,
+    "nodeStats": {
+      "edge-i": {
+        "generated": 35740,
+        "sent": 36133,
+        "duplicatesInjected": 393,
+        "sameNodeDependencies": 3568,
+        "crossNodeDependencies": 26641,
+        "remoteHintsReceived": 393747,
+        "maxPendingQueueDepth": 690,
+        "darkWindowsEntered": 0,
+        "reconnects": 0,
+        "connectionOpens": 1,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 0,
+        "recoveryCatchupQueued": 0,
+        "recoveryCatchupSent": 0,
+        "recoveryRateLimitedPauses": 0
+      },
+      "edge-k": {
+        "generated": 35877,
+        "sent": 36302,
+        "duplicatesInjected": 425,
+        "sameNodeDependencies": 3596,
+        "crossNodeDependencies": 26580,
+        "remoteHintsReceived": 394347,
+        "maxPendingQueueDepth": 650,
+        "darkWindowsEntered": 0,
+        "reconnects": 0,
+        "connectionOpens": 1,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 0,
+        "recoveryCatchupQueued": 0,
+        "recoveryCatchupSent": 0,
+        "recoveryRateLimitedPauses": 0
+      },
+      "edge-a": {
+        "generated": 36191,
+        "sent": 36609,
+        "duplicatesInjected": 418,
+        "sameNodeDependencies": 3567,
+        "crossNodeDependencies": 26893,
+        "remoteHintsReceived": 394277,
+        "maxPendingQueueDepth": 649,
+        "darkWindowsEntered": 0,
+        "reconnects": 0,
+        "connectionOpens": 1,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 0,
+        "recoveryCatchupQueued": 0,
+        "recoveryCatchupSent": 0,
+        "recoveryRateLimitedPauses": 0
+      },
+      "edge-c": {
+        "generated": 35804,
+        "sent": 36206,
+        "duplicatesInjected": 402,
+        "sameNodeDependencies": 3563,
+        "crossNodeDependencies": 26660,
+        "remoteHintsReceived": 394717,
+        "maxPendingQueueDepth": 662,
+        "darkWindowsEntered": 0,
+        "reconnects": 0,
+        "connectionOpens": 1,
+        "jitterExtraDelaysApplied": 36206,
+        "jitterSpikeDelaysApplied": 7124,
+        "recoveryWindowsStarted": 0,
+        "recoveryCatchupQueued": 0,
+        "recoveryCatchupSent": 0,
+        "recoveryRateLimitedPauses": 0
+      },
+      "edge-e": {
+        "generated": 36170,
+        "sent": 36577,
+        "duplicatesInjected": 407,
+        "sameNodeDependencies": 3611,
+        "crossNodeDependencies": 26864,
+        "remoteHintsReceived": 394457,
+        "maxPendingQueueDepth": 703,
+        "darkWindowsEntered": 0,
+        "reconnects": 0,
+        "connectionOpens": 1,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 0,
+        "recoveryCatchupQueued": 0,
+        "recoveryCatchupSent": 0,
+        "recoveryRateLimitedPauses": 0
+      },
+      "edge-l": {
+        "generated": 36058,
+        "sent": 36506,
+        "duplicatesInjected": 448,
+        "sameNodeDependencies": 3515,
+        "crossNodeDependencies": 26957,
+        "remoteHintsReceived": 394676,
+        "maxPendingQueueDepth": 676,
+        "darkWindowsEntered": 0,
+        "reconnects": 0,
+        "connectionOpens": 1,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 0,
+        "recoveryCatchupQueued": 0,
+        "recoveryCatchupSent": 0,
+        "recoveryRateLimitedPauses": 0
+      },
+      "edge-d": {
+        "generated": 36005,
+        "sent": 36425,
+        "duplicatesInjected": 420,
+        "sameNodeDependencies": 3555,
+        "crossNodeDependencies": 26578,
+        "remoteHintsReceived": 394743,
+        "maxPendingQueueDepth": 666,
+        "darkWindowsEntered": 0,
+        "reconnects": 0,
+        "connectionOpens": 1,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 0,
+        "recoveryCatchupQueued": 0,
+        "recoveryCatchupSent": 0,
+        "recoveryRateLimitedPauses": 0
+      },
+      "edge-b": {
+        "generated": 36424,
+        "sent": 36863,
+        "duplicatesInjected": 439,
+        "sameNodeDependencies": 3565,
+        "crossNodeDependencies": 27094,
+        "remoteHintsReceived": 390580,
+        "maxPendingQueueDepth": 1209,
+        "darkWindowsEntered": 12,
+        "reconnects": 12,
+        "connectionOpens": 13,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 12,
+        "recoveryCatchupQueued": 18221,
+        "recoveryCatchupSent": 14328,
+        "recoveryRateLimitedPauses": 12527
+      },
+      "edge-h": {
+        "generated": 35703,
+        "sent": 36153,
+        "duplicatesInjected": 450,
+        "sameNodeDependencies": 3486,
+        "crossNodeDependencies": 26491,
+        "remoteHintsReceived": 395258,
+        "maxPendingQueueDepth": 744,
+        "darkWindowsEntered": 0,
+        "reconnects": 0,
+        "connectionOpens": 1,
+        "jitterExtraDelaysApplied": 36153,
+        "jitterSpikeDelaysApplied": 7114,
+        "recoveryWindowsStarted": 0,
+        "recoveryCatchupQueued": 0,
+        "recoveryCatchupSent": 0,
+        "recoveryRateLimitedPauses": 0
+      },
+      "edge-g": {
+        "generated": 35918,
+        "sent": 36371,
+        "duplicatesInjected": 453,
+        "sameNodeDependencies": 3568,
+        "crossNodeDependencies": 26744,
+        "remoteHintsReceived": 395075,
+        "maxPendingQueueDepth": 687,
+        "darkWindowsEntered": 0,
+        "reconnects": 0,
+        "connectionOpens": 1,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 0,
+        "recoveryCatchupQueued": 0,
+        "recoveryCatchupSent": 0,
+        "recoveryRateLimitedPauses": 0
+      },
+      "edge-f": {
+        "generated": 35959,
+        "sent": 36376,
+        "duplicatesInjected": 417,
+        "sameNodeDependencies": 3516,
+        "crossNodeDependencies": 26775,
+        "remoteHintsReceived": 378665,
+        "maxPendingQueueDepth": 1202,
+        "darkWindowsEntered": 12,
+        "reconnects": 12,
+        "connectionOpens": 13,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 12,
+        "recoveryCatchupQueued": 17552,
+        "recoveryCatchupSent": 14973,
+        "recoveryRateLimitedPauses": 13495
+      },
+      "edge-j": {
+        "generated": 35891,
+        "sent": 36311,
+        "duplicatesInjected": 420,
+        "sameNodeDependencies": 3552,
+        "crossNodeDependencies": 26732,
+        "remoteHintsReceived": 373016,
+        "maxPendingQueueDepth": 1241,
+        "darkWindowsEntered": 12,
+        "reconnects": 12,
+        "connectionOpens": 13,
+        "jitterExtraDelaysApplied": 0,
+        "jitterSpikeDelaysApplied": 0,
+        "recoveryWindowsStarted": 12,
+        "recoveryCatchupQueued": 16675,
+        "recoveryCatchupSent": 13708,
+        "recoveryRateLimitedPauses": 12139
+      }
+    },
+    "persistedLateArrivals": 200,
+    "faultEventsByType": {
+      "dark_start": 36,
+      "dark_end": 36
+    }
+  },
+  "stream": {
+    "batches": 347143,
+    "correctionBatches": 0,
+    "finalBatches": 1,
+    "orderedEvents": 431740,
+    "anomalies": 295931,
+    "maxWatermarkMs": "1782199811674",
+    "lastWatermarkMs": "1782199811674",
+    "byAnomalyType": {
+      "sequence_regression": 2349,
+      "late_arrival": 293582
+    },
+    "byAnomalySeverity": {
+      "warning": 295931
+    },
+    "byOrderBasis": {
+      "sequence": 430852,
+      "causal": 888
+    },
+    "byConfidence": {
+      "derived": 410028,
+      "proven": 21712
+    }
+  },
+  "dedupe": {
+    "acceptedEvents": 431740,
+    "droppedDuplicates": 5092,
+    "currentCacheSize": 11838,
+    "activeWindowSeconds": 480
+  },
+  "samples": {
+    "anomalies": [
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-k-000000000425",
+        "relatedEventIds": [],
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-h-000000000966",
+        "relatedEventIds": [],
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "sequence_regression",
+        "severity": "warning",
+        "eventId": "edge-b-000000001064",
+        "relatedEventIds": [],
+        "message": "Sequence regressed for node"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001176",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001177",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001178",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001179",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001180",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001181",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001182",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001183",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001184",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001185",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001186",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001187",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001188",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001189",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001190",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001191",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      },
+      {
+        "type": "late_arrival",
+        "severity": "warning",
+        "eventId": "edge-b-000000001192",
+        "relatedEventIds": [],
+        "message": "Event arrived after the active watermark"
+      }
+    ],
+    "corrections": []
+  },
+  "simulation": {
+    "generated": 431740,
+    "delivered": 431740,
+    "sent": 436832,
+    "duplicatesInjected": 5092,
+    "sameNodeDependencies": 42662,
+    "crossNodeDependencies": 321009,
+    "remoteHintsReceived": 4693558,
+    "maxPendingQueueDepth": 1241,
+    "maxQueueDepth": 1241,
+    "darkWindowsEntered": 36,
+    "reconnects": 36,
+    "connectionOpens": 48,
+    "jitterExtraDelaysApplied": 72359,
+    "jitterSpikeDelaysApplied": 14238
+  }
+}

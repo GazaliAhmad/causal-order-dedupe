@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0]
+
+### Added
+
+- Added explicit runtime fault-injection support for expanded deployment-style tests, including per-node dark/reconnect windows and per-node jitter injection through new CLI flags such as `--dark-nodes`, `--dark-interval`, `--dark-duration`, `--dark-start-after`, `--dark-stagger`, and `--jitter-nodes`.
+- Added collector and summary reporting for expanded fault-injection runs so lifecycle artifacts and `summary.json` now capture dark-window counts, reconnect counts, connection-open counts, jitter-delay counts, and per-run fault-state transitions.
+- Added runtime config contract coverage for fault-injection validation, including unknown-node rejection, dark-versus-jitter overlap rejection, and invalid duration and jitter-range checks.
+- Added the `profiles/expected-production-mesh-dark-jitter.json` workload profile to support larger mesh runs that combine intermittent node loss with unstable-link delay pressure.
+- Added a separate rejoin-aware runtime harness and config-contract path so reconnect smoothing experiments can be tested without changing the baseline deployment harness.
+- Added sanitized tracked `test-artifacts/` evidence for the hostile `fault-injection` `n=12` `4h` rejoin-aware run and its side-by-side comparison against the original `4h` run.
+
+### Changed
+
+- Updated deployment-style node workers so dark nodes now stop emitting during their dark window, reconnect cleanly afterward, and resume reporting to the collector without requiring whole-run interruption.
+- Updated the runtime smoke-test path to exercise a 12-node expanded fault-injection scenario with real dark-start and dark-end lifecycle events instead of relying only on partition-like delay approximation.
+- Recorded the released `1.1.0` hostile-profile conclusion: both tracked `fault-injection` `n=12` `4h` runs stayed correctness-safe with zero duplicate leakage and zero error-level anomalies, even though the profile remained `PASS WITH STRESS`.
+- Updated repo guidance to treat `expected-production-mesh-dark-jitter` as a hostile resilience-boundary profile, not as a release track that still requires additional `8h` or `12h` repetition after the `4h` confirmation.
+
 ## [1.0.8]
 
 ### Added

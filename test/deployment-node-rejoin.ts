@@ -17,20 +17,41 @@ import {
   type RuntimeConfig,
   type SimulationEvent,
 } from "./deployment-common.js";
+import {
+  deserializeRejoinShapingConfig,
+  formatRejoinShapingSummary,
+  type RejoinShapingConfig,
+} from "./deployment-rejoin-common.js";
 
 type JsonRecord = Record<string, any>;
+type PendingCategory = "live" | "catchup" | "duplicate";
+
+interface PendingDelivery {
+  event: SimulationEvent;
+  sendAtMs: bigint;
+  category: PendingCategory;
+}
 
 const rawConfig = process.env.RUNTIME_DEPLOYMENT_CONFIG;
+const rawRejoinShaping = process.env.RUNTIME_REJOIN_SHAPING;
 const nodeId = process.env.RUNTIME_NODE_ID;
 const collectorPort = Number(process.env.RUNTIME_COLLECTOR_PORT);
 
-if (!rawConfig || !nodeId || !Number.isFinite(collectorPort)) {
+if (
+  !rawConfig ||
+  !rawRejoinShaping ||
+  !nodeId ||
+  !Number.isFinite(collectorPort)
+) {
   throw new Error("Missing node runtime environment");
 }
 
 const config = deserializeConfig(JSON.parse(rawConfig) as JsonRecord) as RuntimeConfig & {
   wallStartMs: number;
 };
+const rejoinShaping = deserializeRejoinShapingConfig(
+  JSON.parse(rawRejoinShaping) as Record<string, unknown>,
+);
 const clock = createSimulationClock(config);
 const hlc = createHlcClock({ nodeId, now: clock.simulationNowMs });
 const profile = config.workloadProfile;
@@ -62,6 +83,13 @@ const state = {
   connectionOpens: 0,
   jitterExtraDelaysApplied: 0,
   jitterSpikeDelaysApplied: 0,
+  recoveryActiveUntilMs: null as bigint | null,
+  recoveryTokens: 0,
+  recoveryLastRefillAtMs: null as bigint | null,
+  recoveryWindowsStarted: 0,
+  recoveryCatchupQueued: 0,
+  recoveryCatchupSent: 0,
+  recoveryRateLimitedPauses: 0,
 };
 
 process.once("SIGINT", () => {
@@ -71,11 +99,15 @@ process.once("SIGTERM", () => {
   state.stopRequested = true;
 });
 process.once("uncaughtException", (error) => {
-  process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  process.stderr.write(
+    `${error instanceof Error ? error.stack ?? error.message : String(error)}\n`,
+  );
   process.exitCode = 1;
 });
 process.once("unhandledRejection", (reason) => {
-  process.stderr.write(`${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}\n`);
+  process.stderr.write(
+    `${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}\n`,
+  );
   process.exitCode = 1;
 });
 
@@ -93,8 +125,9 @@ if (!state.darkActive) {
 }
 
 log(`node started on port ${collectorPort}`);
+log(`rejoin shaping ${formatRejoinShapingSummary(rejoinShaping)}`);
 
-const pending: Array<{ event: SimulationEvent; sendAtMs: bigint }> = [];
+const pending: PendingDelivery[] = [];
 
 while (true) {
   const now = clock.simulationNowMs();
@@ -119,20 +152,28 @@ while (true) {
   }
 
   let sentAny = false;
-  while (
-    socket &&
-    pending[0] &&
-    pending[0].sendAtMs <= clock.simulationNowMs()
-  ) {
-    const delivery = pending.shift()!;
+  let rateLimitedByRecovery = false;
+  while (socket) {
+    const nextDelivery = takeNextDueDelivery(pending, clock.simulationNowMs());
+    if (nextDelivery.kind === "none") {
+      break;
+    }
+    if (nextDelivery.kind === "rate_limited") {
+      rateLimitedByRecovery = true;
+      break;
+    }
+
+    const delivery = pending.splice(nextDelivery.index, 1)[0];
+    const ingestedAt = clock.simulationNowMs();
     sendMessage({
       type: "event",
       nodeId,
-      event: serializeEventForWire(
-        materializeDelivery(delivery.event, clock.simulationNowMs()),
-      ),
+      event: serializeEventForWire(materializeDelivery(delivery.event, ingestedAt)),
     });
     state.sent += 1;
+    if (delivery.category !== "live" && isRecoveryWindowActive(ingestedAt)) {
+      state.recoveryCatchupSent += 1;
+    }
     sentAny = true;
   }
 
@@ -161,6 +202,18 @@ while (true) {
     continue;
   }
 
+  if (rateLimitedByRecovery) {
+    state.recoveryRateLimitedPauses += 1;
+    const nextRecoverySendAtMs = nextRecoveryTokenAtMs(clock.simulationNowMs());
+    if (nextRecoverySendAtMs !== null) {
+      await sleepForSimulatedGap(
+        nextRecoverySendAtMs - clock.simulationNowMs(),
+        config.timeScale,
+      );
+      continue;
+    }
+  }
+
   const nextActionAtMs = findNextActionAtMs(pending);
   if (nextActionAtMs === null) {
     break;
@@ -180,20 +233,24 @@ sendMessage({
   type: "complete",
   nodeId,
   stats: {
-      generated: state.generated,
+    generated: state.generated,
     sent: state.sent,
     duplicatesInjected: state.duplicatesInjected,
     sameNodeDependencies: state.sameNodeDependencies,
-      crossNodeDependencies: state.crossNodeDependencies,
-      remoteHintsReceived: state.remoteHintsReceived,
-      maxPendingQueueDepth: state.maxPendingQueueDepth,
-      darkWindowsEntered: state.darkWindowsEntered,
-      reconnects: state.reconnects,
-      connectionOpens: state.connectionOpens,
-      jitterExtraDelaysApplied: state.jitterExtraDelaysApplied,
-      jitterSpikeDelaysApplied: state.jitterSpikeDelaysApplied,
-    },
-  });
+    crossNodeDependencies: state.crossNodeDependencies,
+    remoteHintsReceived: state.remoteHintsReceived,
+    maxPendingQueueDepth: state.maxPendingQueueDepth,
+    darkWindowsEntered: state.darkWindowsEntered,
+    reconnects: state.reconnects,
+    connectionOpens: state.connectionOpens,
+    jitterExtraDelaysApplied: state.jitterExtraDelaysApplied,
+    jitterSpikeDelaysApplied: state.jitterSpikeDelaysApplied,
+    recoveryWindowsStarted: state.recoveryWindowsStarted,
+    recoveryCatchupQueued: state.recoveryCatchupQueued,
+    recoveryCatchupSent: state.recoveryCatchupSent,
+    recoveryRateLimitedPauses: state.recoveryRateLimitedPauses,
+  },
+});
 socket?.end();
 log(
   [
@@ -206,7 +263,7 @@ log(
 
 function scheduleDueEvents(
   now: bigint,
-  pendingQueue: Array<{ event: SimulationEvent; sendAtMs: bigint }>,
+  pendingQueue: PendingDelivery[],
 ): void {
   while (state.nextEmitAtMs <= now && now < clock.simulatedEndMs) {
     const phase = getPhase(now);
@@ -217,19 +274,28 @@ function scheduleDueEvents(
     const appliedDelayMs =
       baseDelayMs > maxAllowedDelayMs ? maxAllowedDelayMs : baseDelayMs;
     const sendAtMs = chooseSendTime(phase, now + appliedDelayMs);
+    const category: PendingCategory =
+      state.nextEmitAtMs < now ? "catchup" : "live";
 
     pendingQueue.push({
       event: eventRecord.event,
       sendAtMs,
+      category,
     });
+    if (category === "catchup" && isRecoveryWindowActive(now)) {
+      state.recoveryCatchupQueued += 1;
+    }
 
-    maybeInjectDuplicate(eventRecord, now, pendingQueue);
+    maybeInjectDuplicate(eventRecord, now, pendingQueue, category);
     rememberLocalEvent(eventRecord.event);
     state.nextEmitAtMs += sampleIntervalMs(resolveNodeRate(phase));
   }
 }
 
-function createEventRecord(now: bigint, phase: string): { event: SimulationEvent; createdAtMs: bigint } {
+function createEventRecord(
+  now: bigint,
+  phase: string,
+): { event: SimulationEvent; createdAtMs: bigint } {
   const dependencyChoice = chooseDependency(phase);
   const traceId = dependencyChoice?.traceId ?? nextTraceId();
   const entityId = dependencyChoice?.entityId ?? nextEntityId();
@@ -351,7 +417,8 @@ function chooseOperation(phase: string, dependencyChoice: JsonRecord | null): st
 function maybeInjectDuplicate(
   eventRecord: { event: SimulationEvent },
   now: bigint,
-  pendingQueue: Array<{ event: SimulationEvent; sendAtMs: bigint }>,
+  pendingQueue: PendingDelivery[],
+  sourceCategory: PendingCategory,
 ): void {
   const phase = eventRecord.event.payload.phase ?? "steady";
   const duplicateChance =
@@ -372,6 +439,7 @@ function maybeInjectDuplicate(
   pendingQueue.push({
     event: eventRecord.event,
     sendAtMs: now + appliedDelayMs,
+    category: sourceCategory === "live" ? "duplicate" : "catchup",
   });
 }
 
@@ -510,9 +578,7 @@ function getPhase(now: bigint): string {
   return now - clock.simulatedStartMs < config.steadyForMs ? "steady" : "chaotic";
 }
 
-function findNextActionAtMs(
-  pendingQueue: Array<{ event: SimulationEvent; sendAtMs: bigint }>,
-): bigint | null {
+function findNextActionAtMs(pendingQueue: PendingDelivery[]): bigint | null {
   const now = clock.simulationNowMs();
   let nextAt: bigint | null = null;
 
@@ -639,6 +705,7 @@ function syncDarkState(now: bigint): void {
     const activeSocket = socket;
     socket = null;
     pendingBuffer = "";
+    clearRecoveryWindow();
 
     if (
       activeSocket &&
@@ -669,6 +736,7 @@ function syncDarkState(now: bigint): void {
   state.darkActive = false;
   state.reconnects += 1;
   pendingBuffer = "";
+  startRecoveryWindow(now);
   void ensureConnected()
     .then(() => {
       sendMessage({
@@ -678,10 +746,14 @@ function syncDarkState(now: bigint): void {
       });
     })
     .catch((error) => {
-      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.stderr.write(
+        `${error instanceof Error ? error.message : String(error)}\n`,
+      );
       process.exitCode = 1;
     });
-  log(`[sim ${formatDuration(now - clock.simulatedStartMs)}] dark_end`);
+  log(
+    `[sim ${formatDuration(now - clock.simulatedStartMs)}] dark_end ${formatRejoinShapingSummary(rejoinShaping)}`,
+  );
 }
 
 function shouldBeDark(now: bigint): boolean {
@@ -728,4 +800,125 @@ function applyJitterDelay(delayMs: bigint): bigint {
 
 function sampleConfiguredDelay(minMs: bigint, maxMs: bigint): bigint {
   return BigInt(randomInt(Number(minMs), Number(maxMs)));
+}
+
+function startRecoveryWindow(now: bigint): void {
+  if (!isDarkNode) {
+    return;
+  }
+
+  state.recoveryActiveUntilMs = now + rejoinShaping.recoveryWindowMs;
+  state.recoveryTokens = rejoinShaping.burstSize;
+  state.recoveryLastRefillAtMs = now;
+  state.recoveryWindowsStarted += 1;
+}
+
+function clearRecoveryWindow(): void {
+  state.recoveryActiveUntilMs = null;
+  state.recoveryTokens = 0;
+  state.recoveryLastRefillAtMs = null;
+}
+
+function isRecoveryWindowActive(now: bigint): boolean {
+  if (state.recoveryActiveUntilMs === null) {
+    return false;
+  }
+  if (now >= state.recoveryActiveUntilMs) {
+    clearRecoveryWindow();
+    return false;
+  }
+  return true;
+}
+
+function refillRecoveryTokens(now: bigint): void {
+  if (!isRecoveryWindowActive(now) || state.recoveryLastRefillAtMs === null) {
+    return;
+  }
+
+  if (now <= state.recoveryLastRefillAtMs) {
+    return;
+  }
+
+  const elapsedMs = Number(now - state.recoveryLastRefillAtMs);
+  const refilledTokens =
+    state.recoveryTokens + (elapsedMs * rejoinShaping.tokenRatePerSecond) / 1000;
+  state.recoveryTokens = Math.min(rejoinShaping.burstSize, refilledTokens);
+  state.recoveryLastRefillAtMs = now;
+}
+
+function tryConsumeRecoveryToken(now: bigint): boolean {
+  refillRecoveryTokens(now);
+  if (!isRecoveryWindowActive(now)) {
+    return true;
+  }
+  if (state.recoveryTokens < 1) {
+    return false;
+  }
+  state.recoveryTokens -= 1;
+  return true;
+}
+
+function nextRecoveryTokenAtMs(now: bigint): bigint | null {
+  if (!isRecoveryWindowActive(now)) {
+    return null;
+  }
+
+  refillRecoveryTokens(now);
+  if (!isRecoveryWindowActive(now)) {
+    return null;
+  }
+  if (state.recoveryTokens >= 1) {
+    return now;
+  }
+
+  const missingTokens = 1 - state.recoveryTokens;
+  const waitMs = Math.max(
+    1,
+    Math.ceil((missingTokens * 1000) / rejoinShaping.tokenRatePerSecond),
+  );
+  const nextAt = now + BigInt(waitMs);
+  return state.recoveryActiveUntilMs !== null &&
+    nextAt > state.recoveryActiveUntilMs
+    ? state.recoveryActiveUntilMs
+    : nextAt;
+}
+
+function shouldRateLimitDelivery(
+  delivery: PendingDelivery,
+  now: bigint,
+): boolean {
+  if (delivery.category === "live") {
+    return false;
+  }
+  return isRecoveryWindowActive(now);
+}
+
+function takeNextDueDelivery(
+  pendingQueue: PendingDelivery[],
+  now: bigint,
+): { kind: "none" } | { kind: "rate_limited" } | { kind: "delivery"; index: number } {
+  let firstRateLimitedIndex: number | null = null;
+
+  for (let index = 0; index < pendingQueue.length; index += 1) {
+    const delivery = pendingQueue[index];
+    if (delivery.sendAtMs > now) {
+      break;
+    }
+    if (!shouldRateLimitDelivery(delivery, now)) {
+      return { kind: "delivery", index };
+    }
+    if (firstRateLimitedIndex === null) {
+      firstRateLimitedIndex = index;
+    }
+  }
+
+  if (firstRateLimitedIndex === null) {
+    return { kind: "none" };
+  }
+
+  if (tryConsumeRecoveryToken(now)) {
+    return { kind: "delivery", index: firstRateLimitedIndex };
+  }
+
+  return { kind: "rate_limited" };
 }

@@ -45,7 +45,6 @@ export interface DedupeGatewayConfig {
   autoCleanup?: boolean;
   autoCleanupIntervalSeconds?: number;
   nowProvider?: () => bigint | number;
-  now_provider?: () => bigint | number;
 }
 
 export interface DedupeGatewayFileConfig {
@@ -259,7 +258,7 @@ function resolveGatewayConfig(
       fallback: 30,
       label: "autoCleanupIntervalSeconds",
     }),
-    nowProvider: config.nowProvider ?? config.now_provider ?? null,
+    nowProvider: config.nowProvider ?? null,
   };
 }
 
