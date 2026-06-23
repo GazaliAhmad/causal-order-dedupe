@@ -2,19 +2,13 @@
 
 Deduplication support for `causal-order` event streams.
 
-## Version Notice
+## Current Release
 
-Published versions `1.0.1` through `1.0.5` are deprecated due to a config-adherence bug in runtime dedupe behavior. In those affected versions, the active dedupe window and cleanup behavior may not honor configured values correctly under runtime conditions.
+Version `1.1.0` is the current stable release line.
 
-Version `1.0.0` was published and immediately deprecated because `LICENSE.md` was accidentally excluded from the npm package. Version `1.0.3` was never published to npm.
+It adds released fault-injection coverage for larger dark+jitter mesh runs and records the current resilience boundary for the hostile `expected-production-mesh-dark-jitter` profile.
 
-Use `1.0.6` or later.
-
- `1.0.6` fixes the config-adherence bug and adds `getStats()` for lightweight runtime insights on dedupe activity and state. The gateway also supports `updateWindow(seconds)` for runtime window adjustment and `destroy()` for clearing cache and resetting stats when needed.
-
-*Current release note:*
-
-- `1.0.8` - Current stable release line.
+Current `1.1.0` read: the tracked `n=12` hostile-profile runs kept `@causal-order/dedupe` and `causal-order` correctness-safe with zero duplicate leakage and zero error-level anomalies, but they still operated under heavy late-arrival pressure. That profile is now documented as a resilience-boundary check rather than a line that still needs longer `8h` or `12h` repetition for this release.
 
 ## Relationship to [causal-order](https://www.npmjs.com/package/causal-order)
 
@@ -150,3 +144,11 @@ This is optional for most drop-in use because automatic cleanup is enabled by de
 ### `destroy()`
 
 Clears the in-memory cache and resets runtime stats for that gateway instance.
+
+## Version Notice
+
+Published versions `1.0.1` through `1.0.5` are deprecated due to a config-adherence bug in runtime dedupe behavior. In those affected versions, the active dedupe window and cleanup behavior may not honor configured values correctly under runtime conditions.
+
+Version `1.0.0` was published and immediately deprecated because `LICENSE.md` was accidentally excluded from the npm package. Version `1.0.3` was never published to npm.
+
+Version `1.0.6` fixes the config-adherence bug and adds `getStats()` for lightweight runtime insights on dedupe activity and state. The gateway also supports `updateWindow(seconds)` for runtime window adjustment and `destroy()` for clearing cache and resetting stats when needed.
