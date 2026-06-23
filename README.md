@@ -1,6 +1,8 @@
 # @causal-order/dedupe
 
-Deduplication support for `causal-order` event streams.
+Deployable duplicate-filtering runtime for `causal-order` event streams.
+
+`@causal-order/dedupe` is a deployable duplicate-filtering runtime for replay, recovery, reconnect, and distributed event-ingestion flows that need bounded replay handling before events enter the `causal-order` pipeline.
 
 ## Current Release
 
@@ -10,11 +12,29 @@ It adds released fault-injection coverage for larger dark+jitter mesh runs and r
 
 Current `1.1.0` read: the tracked `n=12` hostile-profile runs kept `@causal-order/dedupe` and `causal-order` correctness-safe with zero duplicate leakage and zero error-level anomalies, but they still operated under heavy late-arrival pressure. That profile is now documented as a resilience-boundary check rather than a line that still needs longer `8h` or `12h` repetition for this release.
 
+## Practical Topology Framing
+
+For deployment-minded runtime evaluation in this repo, the current practical node-count framing is:
+
+- `n=3`: minimal production baseline
+- `n=5`: primary real-world baseline
+- `n=8`: growth baseline
+- `n=12`: resilience / expansion boundary
+
+In other words:
+
+- use `n=3` to confirm the package behaves cleanly in the smallest serious cluster shape
+- use `n=5` as the most representative everyday deployment target
+- use `n=8` to show there is still comfort margin when the cluster grows beyond the ordinary case
+- use `n=12` to prove headroom and reconnect resilience rather than to model the default expected deployment
+
+This is a practical deployment and testing model, not a hard limit or universal production rule.
+
 ## Relationship to [causal-order](https://www.npmjs.com/package/causal-order)
 
 `@causal-order/dedupe` is an extension package for [`causal-order`](https://www.npmjs.com/package/causal-order).
 
-It provides duplicate-event detection before events enter the causal ordering pipeline and is intended to sit immediately before the ordering stage in stream-processing, replay, recovery, and ingestion workflows built on top of the `causal-order` runtime.
+It provides deployable duplicate-event detection before events enter the causal ordering pipeline and is intended to sit immediately before the ordering stage in stream-processing, replay, recovery, and ingestion workflows built on top of the `causal-order` runtime.
 
 | Package                | Purpose                            |
 | ---------------------- | ---------------------------------- |

@@ -180,6 +180,48 @@ Released scope:
   - further `8h` and `12h` repetition on that same hostile track is not required for the current release story
 - The intent of `v1.1.0` is to move the package from operator-ready baseline into operator-ready resilience testing, especially for mobile, edge, and intermittently connected participant scenarios.
 
+## Tentative Next `/dedupe` Update
+
+- Possible next package-level follow-up: define and implement an explicit reconnect-safe `/dedupe` contract for ordinary temporary disconnect and replay scenarios.
+- This is intentionally tentative rather than committed release scope.
+- Current repo evidence says reconnect smoothing in the harness is helpful for burst control, but not required to preserve the current correctness conclusion.
+- Current hostile-profile evidence also says `/dedupe` stayed correctness-safe both with and without the rejoin-aware harness.
+- That weakens the case for introducing a separate reconnect glue layer by default when the package itself is already surviving the harsher replay pattern.
+- That means any future `/dedupe` reconnect update should be justified by a package contract gap, not only by a desire to make the harness look smoother.
+- The next useful decision point is the ordinary `12h` wall-clock comparison on a more typical real-world deployment shape.
+- That comparison should answer a narrower question than the hostile track did:
+  - not whether `/dedupe` can survive reconnect stress at all
+  - but whether ordinary reconnect behavior reveals a small package-level semantics or stability gap worth addressing inside `/dedupe`
+- If the normal-profile comparison shows only modest reconnect-pressure differences, that supports keeping the architecture simpler and avoiding another syntax-level helper layer.
+- If the normal-profile comparison shows a repeatable reconnect-specific weakness, then a small `/dedupe` tweak may be the better next step than adding another glue abstraction.
+- The target use case would be a caller that disconnects temporarily, reconnects, and replays buffered events into `@causal-order/dedupe`.
+- The package-level goal would be to stay both correctness-safe and operationally stable during that recovery pattern.
+- Tentative reconnect-safe expectations:
+  - no duplicate leakage during or after reconnect replay
+  - no false duplicate drops for valid first-seen events inside the configured window
+  - no reconnect-driven corruption of watermark or active-window state
+  - causal ordering remains valid under replayed and delayed deliveries
+  - reconnect bursts may temporarily raise latency, but must not create unbounded memory or backlog growth
+  - recovery should converge back to steady-state behavior without manual reset
+- Tentative operator/runtime visibility expectations:
+  - duplicate counts during reconnect-heavy periods
+  - late-arrival counts during reconnect-heavy periods
+  - active dedupe window visibility
+  - bounded backlog or queue-growth signals
+  - memory-pressure indicators where practical
+- Tentative non-goals:
+  - `/dedupe` should not own transport retry strategy
+  - `/dedupe` should not be the only place reconnect smoothing happens
+  - `/dedupe` does not need to make pathological replay floods cheap, only safe and bounded
+- Tentative decision rule for doing this work:
+  - change `/dedupe` only if reconnect behavior reveals a real package-level semantics or stability gap
+  - prefer caller or transport shaping first when the problem is only replay burst shape
+  - move reconnect handling into `/dedupe` only when reasonable caller shaping still leaves correctness or stability exposed
+- Tentative acceptance bar:
+  - a dark node reconnects and replays buffered traffic
+  - duplicates and late arrivals rise temporarily
+  - final result still returns zero duplicate leakage, zero error-level anomalies, bounded queue and memory behavior, and recovery back toward baseline pressure
+
 ## Longer Term
 
 - Bring the local `profiles/` harness and operator-facing package presets closer together so testing language matches deployment language.
