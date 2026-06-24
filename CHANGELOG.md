@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1]
+
+### Added
+
+- Added tracked `test-artifacts/` comparison notes for the `12h` `n=12` `typical-real-world-mesh` standard versus rejoin-aware runs, including the recorded interpretation of wider `240s / 480s` dedupe floor/max-window settings.
+
+### Changed
+
+- Updated the published package-facing docs to frame `@causal-order/dedupe` as a deployable duplicate-filtering runtime rather than only as a repo-tested layer.
+- Updated the README with practical topology framing so `n=3`, `n=5`, `n=8`, and `n=12` are described as minimal baseline, primary real-world baseline, growth baseline, and resilience/expansion boundary respectively.
+- Updated roadmap guidance to reflect the current conclusion that there is no clear need for reconnect-specific dedupe changes, while keeping wider floor/max pairs such as `240s / 480s` positioned as situational deployment options rather than default upgrades.
+- Kept `1.1.1` as a docs-only patch release with no runtime or API behavior change from `1.1.0`.
+
 ## [1.1.0]
 
 ### Added
