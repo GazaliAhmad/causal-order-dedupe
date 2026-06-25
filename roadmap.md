@@ -48,9 +48,10 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - released `v1.1.0` hostile-profile evidence: the tracked `expected-production-mesh-dark-jitter` `n=12` `4h` runs kept `@causal-order/dedupe` and `causal-order` correctness-safe with zero duplicate leakage and zero error-level anomalies, even while remaining intentionally high-pressure
   - the hostile dark+jitter profile is now treated as a resilience-boundary check rather than a release track that still needs longer `8h` or `12h` repetition
   - the tracked `12h` `n=12` `typical-real-world-mesh` standard vs rejoin-aware comparison also kept duplicate leakage at zero and both runs healthy, which now reinforces the `1.1.1` package-facing deployability story without changing runtime behavior from `1.1.0`
+  - the tracked `12h` `n=12` `typical-real-world-mesh` standard vs `cross-node-busy` comparison also kept duplicate leakage at zero and showed that the wider preset remained healthy without producing a strong enough win to replace `standard` as the default baseline
 
 ---
-## *History*
+## History
 
 ## v1.1.1
 
@@ -63,6 +64,7 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - `n=8` as practical growth baseline
   - `n=12` as resilience and expansion evidence
 - Recorded the tracked `12h` `n=12` `typical-real-world-mesh` standard vs rejoin-aware comparison as supporting deployability evidence.
+- Recorded the tracked `12h` `n=12` `typical-real-world-mesh` standard vs `cross-node-busy` comparison as supporting evidence that a wider floor/max pair remains situational rather than default-worthy.
 - Recorded the current package conclusion more explicitly:
   - `standard` remains the cleaner default baseline
   - wider floor/max pairs such as `240s / 480s` remain valid situational options

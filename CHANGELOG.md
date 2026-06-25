@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Added tracked `test-artifacts/` comparison notes for the `12h` `n=12` `typical-real-world-mesh` standard versus rejoin-aware runs, including the recorded interpretation of wider `240s / 480s` dedupe floor/max-window settings.
+- Added tracked `test-artifacts/` comparison notes for the `12h` `n=12` `typical-real-world-mesh` standard versus `cross-node-busy` runs, including the current conclusion that the wider preset remained healthy but did not displace `standard` as the cleaner default baseline.
 
 ### Changed
 

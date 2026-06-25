@@ -144,7 +144,7 @@ Use this when you want to compare a hand-tuned dedupe window against the built-i
 Practical repo-testing takeaway:
 
 - if a longer wall-clock run reports `INVALID CONFIG` or shows `activeWindowSeconds` below the configured floor, do not use it for tuning decisions
-- use `standard`, `cross-node-busy`, `heavy-duplicates`, and `high-latency` as candidates to compare rather than as pre-ranked defaults
+- keep `standard` as the default baseline, then compare `cross-node-busy`, `heavy-duplicates`, or `high-latency` only when the workload shape gives you a concrete reason
 - if fresh runs still report duplicate-event errors or preset regressions, move on to a manual config under `configs/`
 
 Fresh validated long-run baseline:
