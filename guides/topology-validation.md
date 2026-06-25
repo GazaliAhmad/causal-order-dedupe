@@ -6,6 +6,7 @@ Use it when you want to answer questions like:
 
 - does the current single-cluster runtime stay healthy at `n=5`
 - does it stay healthy at `n=8`
+- does it still stay correctness-safe at `n=12`
 - does a larger mesh create correctness, backlog, or pressure trouble
 
 This is a repo testing concern, not the package deployment path.
@@ -41,6 +42,19 @@ Examples:
 - `edge-a,edge-b,edge-c` means `n=3`
 - `edge-a,edge-b,edge-c,edge-d,edge-e` means `n=5`
 - `edge-a,edge-b,edge-c,edge-d,edge-e,edge-f,edge-g,edge-h` means `n=8`
+- `edge-a,edge-b,edge-c,edge-d,edge-e,edge-f,edge-g,edge-h,edge-i,edge-j,edge-k,edge-l` means `n=12`
+
+## Practical Framing
+
+There are two useful ways to talk about topology in this repo:
+
+- repo-preserved baseline: keep `n=3` available as the untouched small-cluster smoke path
+- deployment-minded framing: treat `n=5` as the primary real-world baseline, `n=8` as the growth baseline, and `n=12` as resilience and expansion evidence
+
+Those are not contradictory.
+
+The repo keeps `n=3` because it is the safest unchanged local baseline.
+The package-facing deployment story now centers `n=5` more than `n=3`, because current evidence suggests that ordinary real-world deployment is usually closer to that range than to the larger `n=12` resilience track.
 
 ## Safe Testing Rule
 
@@ -48,10 +62,11 @@ Do not disturb the validated baseline while expanding topology testing.
 
 Practical rule:
 
-- keep the existing `n=3` path as the default baseline
+- keep the existing `n=3` path as the preserved smoke baseline
 - make larger meshes opt-in through `--node-ids`
-- validate `n=5` first
-- validate `n=8` next
+- treat `n=5` as the first deployment-shaped checkpoint
+- treat `n=8` as the next growth checkpoint
+- treat `n=12` as resilience and expansion evidence rather than the default operating assumption
 
 That keeps the current known-good test path intact while still letting the repo test larger meshes.
 
@@ -241,13 +256,32 @@ Operational conclusion for this profile and topology:
 
 Tracked inspection files for this run and comparison live under [test-artifacts](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/README.md), including [expected-production-mesh-standard-12h-n8-wallclock](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-mesh-standard-12h-n8-wallclock/summary.json) and [expected-production-mesh-8h-12h-n8-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/expected-production-mesh-8h-12h-n8-comparison.md).
 
+## Current Typical-Profile `12h` Finding: `n=12`
+
+The newer deployment-shaped `n=12` evidence in this repo uses `profiles/typical-real-world-mesh.json` rather than the older `expected-production-mesh` track.
+
+Tracked comparisons:
+
+- [typical-real-world-mesh-12h-n12-standard-vs-rejoin-aware-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/typical-real-world-mesh-12h-n12-standard-vs-rejoin-aware-comparison.md)
+- [typical-real-world-mesh-12h-n12-standard-vs-cross-node-busy-comparison.md](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/test-artifacts/typical-real-world-mesh-12h-n12-standard-vs-cross-node-busy-comparison.md)
+
+Current reading:
+
+- the `12h` `n=12` standard run stayed healthy
+- the rejoin-aware comparison stayed correctness-safe but did not produce a large enough win to justify another reconnect-specific layer
+- the `cross-node-busy` comparison also stayed correctness-safe, but the wider `240s / 480s` floor/max pair did not produce a meaningful enough win to replace `standard` as the cleaner default baseline
+
+That makes `n=12` useful as headroom and resilience evidence.
+It does not make `n=12` the new default deployment target.
+
 ## What This Means In Real Deployment Terms
 
 In practical terms, this result means:
 
 - the current single-cluster engine did not show correctness trouble at `n=8`
 - backlog pressure did not get worse when moving from `n=5` to `n=8` in this tested workload
-- the larger mesh remained operationally healthy under this tested workload shape
+- the newer `n=12` typical-profile runs also stayed correctness-safe, which strengthens the deployability read for ordinary cluster shapes
+- the larger mesh evidence is best read as comfort margin and resilience headroom, not as proof that most deployments need to target `n=12`
 
 It does not mean:
 
@@ -275,9 +309,9 @@ Its operator-facing purpose is narrower:
 
 Use this progression:
 
-1. Keep `n=3` as the untouched baseline.
-2. Treat `n=5` as the first topology expansion checkpoint.
-3. Treat `n=8` as the next topology checkpoint.
-4. Treat `8h` and `12h` as validated endurance checkpoints for `n=8` under this workload shape.
-5. If more confidence is needed, use a `24h` `n=8` run as the next confirmation step.
-6. Re-check correctness, late ratio, queue peak, and peak RSS at each step instead of assuming larger topologies or longer durations will behave the same way.
+1. Keep `n=3` as the preserved repo smoke baseline.
+2. Treat `n=5` as the primary real-world baseline.
+3. Treat `n=8` as the practical growth baseline.
+4. Treat `n=12` as resilience and expansion evidence rather than the default operating target.
+5. Re-check correctness, late ratio, queue peak, and peak RSS at each step instead of assuming larger topologies or longer durations will behave the same way.
+6. Run longer durations only when you are answering a specific deployment question, not just because a bigger wall-clock number sounds stronger.

@@ -6,11 +6,11 @@ Deployable duplicate-filtering runtime for `causal-order` event streams.
 
 ## Current Release
 
-Version `1.1.0` is the current stable release line.
+Version `1.1.1` is the current stable release line.
 
-It adds released fault-injection coverage for larger dark+jitter mesh runs and records the current resilience boundary for the hostile `expected-production-mesh-dark-jitter` profile.
+It is a docs-and-positioning patch release. It refreshes the published package story to present `@causal-order/dedupe` as a deployable runtime, clarifies practical topology framing, and records the newer typical-profile deployment interpretation alongside the existing hostile-profile resilience evidence.
 
-Current `1.1.0` read: the tracked `n=12` hostile-profile runs kept `@causal-order/dedupe` and `causal-order` correctness-safe with zero duplicate leakage and zero error-level anomalies, but they still operated under heavy late-arrival pressure. That profile is now documented as a resilience-boundary check rather than a line that still needs longer `8h` or `12h` repetition for this release.
+Current `1.1.1` read: runtime behavior remains aligned with the released `1.1.0` package line. The tracked `n=12` hostile-profile runs still define the resilience boundary, while the later `typical-real-world-mesh` comparison strengthens the deployability conclusion for ordinary deployment-shaped use.
 
 ## Practical Topology Framing
 

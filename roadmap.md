@@ -16,13 +16,13 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.1.0` is complete and published to npm as the current release line.
-- `v1.0.8` delivered the topology-validation baseline that `v1.1.0` builds on:
+- Version `1.1.1` is complete and published to npm as the current release line.
+- `v1.0.8` delivered the topology-validation baseline that `v1.1.0` and `v1.1.1` build on:
   - preserved the validated `3`-node path as the default baseline
   - added an opt-in topology configuration path for larger single-cluster runs
   - validated `n=5`, then `n=8`
   - included npm keyword/discoverability metadata in the published manifest
-- Completed and already available from the published `1.1.0` line:
+- Completed and already available from the published `1.1.1` line:
   - first-class preset support exists in `DedupeGateway`
   - default mode behaves as `standard`
   - config-file driven setup now exists for dedupe configuration
@@ -35,6 +35,7 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - fresh deployment-style runtime artifacts now persist dedupe stats
   - duplicate-leak diagnostics now persist in fresh deployment-style runtime artifacts
   - repo-side duplicate inspection now includes a reusable `summary:duplicates` command
+  - the published package metadata and README now frame `@causal-order/dedupe` as a deployable duplicate-filtering runtime
 - Current repo-side operator workflow also includes:
   - a three-way equilibrium model for reading runs through correctness, pressure, and backlog together
   - lightweight package-facing runtime stats through `DedupeGateway#getStats()`
@@ -46,9 +47,28 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
   - a now-validated `expected-production-3way-mesh` operator conclusion: `standard` is the cleaner default baseline, `heavy-duplicates` is a situational alternate, and manual tuning is fallback-only rather than the expected next step for that profile
   - released `v1.1.0` hostile-profile evidence: the tracked `expected-production-mesh-dark-jitter` `n=12` `4h` runs kept `@causal-order/dedupe` and `causal-order` correctness-safe with zero duplicate leakage and zero error-level anomalies, even while remaining intentionally high-pressure
   - the hostile dark+jitter profile is now treated as a resilience-boundary check rather than a release track that still needs longer `8h` or `12h` repetition
+  - the tracked `12h` `n=12` `typical-real-world-mesh` standard vs rejoin-aware comparison also kept duplicate leakage at zero and both runs healthy, which now reinforces the `1.1.1` package-facing deployability story without changing runtime behavior from `1.1.0`
+  - the tracked `12h` `n=12` `typical-real-world-mesh` standard vs `cross-node-busy` comparison also kept duplicate leakage at zero and showed that the wider preset remained healthy without producing a strong enough win to replace `standard` as the default baseline
 
 ---
-## *History*
+## History
+
+## v1.1.1
+
+- Published `v1.1.1` as a docs-only patch release.
+- Kept runtime and API behavior aligned with `v1.1.0`.
+- Updated package-facing docs to present `@causal-order/dedupe` as a deployable duplicate-filtering runtime.
+- Added clearer practical topology framing:
+  - `n=3` as minimal production baseline
+  - `n=5` as primary real-world baseline
+  - `n=8` as practical growth baseline
+  - `n=12` as resilience and expansion evidence
+- Recorded the tracked `12h` `n=12` `typical-real-world-mesh` standard vs rejoin-aware comparison as supporting deployability evidence.
+- Recorded the tracked `12h` `n=12` `typical-real-world-mesh` standard vs `cross-node-busy` comparison as supporting evidence that a wider floor/max pair remains situational rather than default-worthy.
+- Recorded the current package conclusion more explicitly:
+  - `standard` remains the cleaner default baseline
+  - wider floor/max pairs such as `240s / 480s` remain valid situational options
+  - there is no clear need for reconnect-specific dedupe changes from current evidence
 
 ## v1.0.4
 
@@ -130,8 +150,8 @@ Released scope:
 - Completed a dedicated `summary:duplicates` helper for readable duplicate-leak inspection.
 - Made older pre-instrumentation runs report that diagnostics are unavailable instead of implying a clean “no leaks” result.
 - This release stays intentionally diagnostic-first:
-- it improves operator evidence for duplicate leakage under stress
-- it does not yet change the underlying dedupe or final-drain behavior
+  - it improves operator evidence for duplicate leakage under stress
+  - it does not yet change the underlying dedupe or final-drain behavior
 - Completed validation for this scope through fresh duplicate-leak instrumentation and inspection workflows rather than a new tuning contract.
 
 ## v1.0.8
@@ -182,53 +202,53 @@ Released scope:
 
 ## Tentative Next `/dedupe` Update
 
-- Possible next package-level follow-up: define and implement an explicit reconnect-safe `/dedupe` contract for ordinary temporary disconnect and replay scenarios.
-- This is intentionally tentative rather than committed release scope.
-- Current repo evidence says reconnect smoothing in the harness is helpful for burst control, but not required to preserve the current correctness conclusion.
-- Current hostile-profile evidence also says `/dedupe` stayed correctness-safe both with and without the rejoin-aware harness.
-- That weakens the case for introducing a separate reconnect glue layer by default when the package itself is already surviving the harsher replay pattern.
-- That means any future `/dedupe` reconnect update should be justified by a package contract gap, not only by a desire to make the harness look smoother.
-- The next useful decision point is the ordinary `12h` wall-clock comparison on a more typical real-world deployment shape.
-- That comparison should answer a narrower question than the hostile track did:
-  - not whether `/dedupe` can survive reconnect stress at all
-  - but whether ordinary reconnect behavior reveals a small package-level semantics or stability gap worth addressing inside `/dedupe`
-- If the normal-profile comparison shows only modest reconnect-pressure differences, that supports keeping the architecture simpler and avoiding another syntax-level helper layer.
-- If the normal-profile comparison shows a repeatable reconnect-specific weakness, then a small `/dedupe` tweak may be the better next step than adding another glue abstraction.
-- The target use case would be a caller that disconnects temporarily, reconnects, and replays buffered events into `@causal-order/dedupe`.
-- The package-level goal would be to stay both correctness-safe and operationally stable during that recovery pattern.
-- Tentative reconnect-safe expectations:
-  - no duplicate leakage during or after reconnect replay
-  - no false duplicate drops for valid first-seen events inside the configured window
-  - no reconnect-driven corruption of watermark or active-window state
-  - causal ordering remains valid under replayed and delayed deliveries
-  - reconnect bursts may temporarily raise latency, but must not create unbounded memory or backlog growth
-  - recovery should converge back to steady-state behavior without manual reset
-- Tentative operator/runtime visibility expectations:
-  - duplicate counts during reconnect-heavy periods
-  - late-arrival counts during reconnect-heavy periods
-  - active dedupe window visibility
-  - bounded backlog or queue-growth signals
-  - memory-pressure indicators where practical
-- Tentative non-goals:
-  - `/dedupe` should not own transport retry strategy
-  - `/dedupe` should not be the only place reconnect smoothing happens
-  - `/dedupe` does not need to make pathological replay floods cheap, only safe and bounded
-- Tentative decision rule for doing this work:
-  - change `/dedupe` only if reconnect behavior reveals a real package-level semantics or stability gap
-  - prefer caller or transport shaping first when the problem is only replay burst shape
-  - move reconnect handling into `/dedupe` only when reasonable caller shaping still leaves correctness or stability exposed
-- Tentative acceptance bar:
-  - a dark node reconnects and replays buffered traffic
-  - duplicates and late arrivals rise temporarily
-  - final result still returns zero duplicate leakage, zero error-level anomalies, bounded queue and memory behavior, and recovery back toward baseline pressure
+- Current read: there is no clear need for a reconnect-specific `/dedupe` update right now.
+- This section remains intentionally tentative rather than committed release scope.
+- The `typical-real-world-mesh` comparison evidence in this section now informs the published `1.1.1` docs line, but it still does not imply a runtime behavior change beyond `1.1.0`.
+- Current hostile-profile evidence already says `/dedupe` stayed correctness-safe both with and without the rejoin-aware harness.
+- The later `12h` `n=12` `typical-real-world-mesh` comparison also kept the key correctness gates intact in both harness shapes:
+  - duplicate leakage stayed at zero
+  - error-level anomalies stayed at zero
+  - both runs completed healthy
+- That means the remaining differences are operational tradeoffs, not evidence of a package-level correctness gap.
+- The current repo evidence therefore weakens the case for:
+  - introducing a separate reconnect glue layer
+  - adding reconnect-specific `/dedupe` logic as a required next step
+- Ordinary deployment interpretation now looks stronger than the earlier hostile-track suspicion:
+  - `/dedupe` appears deployable for the expected daily deployment shape
+  - the hostile `n=12` dark+jitter track is better treated as resilience-boundary evidence than as the default operating model
+  - the practical `n=5` baseline is likely even more comfortable than the validated `n=12` typical-profile runs
+- Current likely package conclusion:
+  - `180s / 300s` remains the cleaner default baseline
+  - wider floor/max pairs such as `240s / 480s` remain valid more-defensive options
+  - there is no current evidence that reconnect-specific dedupe logic is needed to make the package deployable
+- If a future reconnect polish is ever pursued, it should be framed as optional operational cleanup rather than package rescue.
+- Any future polish should stay config-aware:
+  - expand above the configured floor during reconnect pressure
+  - return to the configured floor after catch-up plus a short quiet period
+  - never treat `180s` as a hardcoded universal landing point
+- Decision rule for reopening this work:
+  - only revisit `/dedupe` reconnect logic if a future deployment-shaped run reveals a repeatable package-level semantics or stability gap
+  - prefer caller or transport shaping first when the issue is only replay burst shape
+  - treat wider configured floors and ceilings as the first lower-complexity lever before adding adaptive reconnect logic
 
 ## Longer Term
 
+- Keep the package story centered on deployability rather than on repo-only stress testing.
 - Bring the local `profiles/` harness and operator-facing package presets closer together so testing language matches deployment language.
-- Publish a short operator guide for choosing presets in practice.
-- Revisit preset defaults once real-world deployment data becomes available.
+- Publish a short operator guide for choosing presets in practice, with clearer baseline framing:
+  - `n=5` as the primary real-world baseline
+  - `n=8` as the practical growth baseline
+  - `n=12` as resilience and expansion evidence rather than the default operating assumption
+- Keep `standard` as the cleaner default baseline unless future real deployment evidence shows a meaningful reason to promote a wider preset or manual floor.
+- Revisit preset defaults only after real deployment data becomes available, not only from additional synthetic stress runs.
 - Keep manual raw timing as an escape hatch, but continue to prefer config-valid preset outcomes over hand-tuned windows when the validated workload evidence is already clean.
-- Explore a dedicated website project for `@causal-order/dedupe` once the package surface and operator story have settled.
+- Treat wider floor/max pairs such as `240s / 480s` as situational deployment options, not as default upgrades, unless future evidence shows a clear operational gain.
+
+## Tentative Website Project
+
+- This is intentionally tentative rather than committed package scope.
+- Explore a dedicated website project for `@causal-order/dedupe` once the deployable package story and operator guidance have settled.
 - Use an initial website stack built around:
   - `Astro` for the site shell and static-first routing
   - existing repo Markdown under `guides/` as the guides content source
@@ -240,11 +260,11 @@ Released scope:
 - Keep the website content model source-of-truth in this repo instead of duplicating docs into a second content tree:
   - render `guides/` directly as the guides section
   - reuse `test-artifacts/` directly for evidence, comparisons, and scenario pages
-- Favor a custom `Astro` site over a generic docs shell so the package can have a more distinctive visual identity than the current common landing-page patterns.
+- Favor a custom `Astro` site over a generic docs shell so the package can present a clearer deployable-runtime identity than the current common docs-only patterns.
 - Treat interactive pieces as focused islands instead of turning the whole site into a heavy app:
   - keep most pages static
   - add small client-side components later for timelines, topology views, scenario inspectors, or artifact comparison widgets
 - Prefer an interactive visual simulator over a hosted terminal-first experience:
-  - simulate event ordering, duplicates, late arrivals, and replay behavior in the browser
+  - simulate event ordering, duplicates, late arrivals, replay behavior, and dedupe-window tradeoffs in the browser
   - use simulated time by default so long-duration scenarios can be explored quickly
   - keep the initial site Cloudflare-friendly by avoiding unnecessary server-side terminal infrastructure
