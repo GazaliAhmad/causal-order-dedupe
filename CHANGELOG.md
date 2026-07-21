@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0]
+
+### Added
+
+- Added `DedupeGateway#filterWithResult()` with structured accepted, duplicate, and accepted-without-identity outcomes for monitor handlers and stack validation while preserving the existing boolean `filter()` contract.
+- Added deterministic stack contracts for inclusive window boundaries, post-window acceptance, replay duplicate suppression, and the documented in-memory restart redelivery boundary.
+- Added an isolated packed four-package contract that uses the testing provider with monitor `0.5.x`, dedupe, and causal-order to prove order-outage buffering, replay-through-dedupe, duplicate suppression, exact ordered output, and final reservoir drain.
+- Added `publish:prepare:check` as the complete non-publishing release gate and documented that tarball previews must target `./publish-dist` rather than the development repository root.
+
+### Changed
+
+- Raised the runtime requirement from Node `20+` to Node `>=22.13.0` so the package contract aligns with the monitor-enabled causal-order stack and its built-in `node:sqlite` dependency.
+- Updated CI coverage to use the supported Node `22` and Node `24` LTS release lines.
+- Documented the `1.2.x` platform policy: Node-floor alignment may ship in this minor line while the JavaScript API remains compatible, and Node 20 consumers must upgrade before adopting it.
+- Defined the monitor-enabled route contract, including replay-through-dedupe handling, deliberate dedupe-bypass exposure, and the at-least-once process-restart boundary of the in-memory gateway.
+- Reworked the npm README around the causal-order stack, package integration, routing, configuration, public API, and operational constraints, removing repository-harness and tutorial-oriented framing while retaining release history.
+
 ## [1.1.1]
 
 ### Added

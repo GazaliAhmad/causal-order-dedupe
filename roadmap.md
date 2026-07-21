@@ -16,7 +16,13 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.1.1` is complete and published to npm as the current release line.
+- Version `1.2.0` is complete and is the current npm release line:
+  - runtime support is aligned to Node `>=22.13.0` with Node 22 and Node 24 CI lanes
+  - `filterWithResult()` adds structured, payload-free decision evidence while preserving `filter()`
+  - monitor normal, replay, bypass, and in-memory restart semantics are explicit
+  - deterministic window/restart contracts and an isolated packed four-package contract are release-gating checks
+  - `@causal-order/testing@0.3.0` is the companion release for scenario-aware verdicts and tracked monitor operations
+- Version `1.1.1` remains complete and published as the preceding release line.
 - `v1.0.8` delivered the topology-validation baseline that `v1.1.0` and `v1.1.1` build on:
   - preserved the validated `3`-node path as the default baseline
   - added an opt-in topology configuration path for larger single-cluster runs

@@ -1,6 +1,6 @@
 {
   "name": "@causal-order/dedupe",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Deployable duplicate-filtering runtime for causal-order event streams.",
   "keywords": [
     "causal-order",
@@ -31,15 +31,19 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "ci": "npm run check && npm run test:presets && npm run test:stack-contract && npm run test:packed-stack-contract && npm run pack:dist",
     "prepare:dist": "npm run build && node .build/scripts/prepare-dist.js",
     "pack:dist": "npm run prepare:dist && npm pack --dry-run ./publish-dist",
+    "publish:prepare:check": "npm run ci",
     "publish:dist": "npm run prepare:dist && npm publish ./publish-dist --access public",
     "test:presets": "npm run build && node .build/test/preset-contract.js",
+    "test:stack-contract": "npm run build && node .build/test/stack-contract.js",
+    "test:packed-stack-contract": "node scripts/packed-stack-contract.mjs",
     "test:runtime-config": "npm run build && node .build/test/runtime-config-contract.js",
     "test:runtime-topology": "npm run build && node .build/test/runtime-topology-contract.js",
     "test:runtime": "npm run build && node .build/test/deployment-runtime.js",
