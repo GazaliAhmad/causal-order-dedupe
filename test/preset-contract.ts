@@ -210,6 +210,51 @@ function run(): void {
     activeWindowSeconds: 2,
   });
 
+  const structuredResultGateway = new DedupeGateway({ autoCleanup: false });
+  assert.deepEqual(
+    structuredResultGateway.filterWithResult({ id: "structured-id" }),
+    {
+      accepted: true,
+      reason: "accepted",
+      identitySource: "id",
+    },
+  );
+  assert.deepEqual(
+    structuredResultGateway.filterWithResult({ id: "structured-id" }),
+    {
+      accepted: false,
+      reason: "duplicate",
+      identitySource: "id",
+    },
+  );
+  assert.deepEqual(
+    structuredResultGateway.filterWithResult({
+      nodeId: "structured-node",
+      sequence: 1n,
+    }),
+    {
+      accepted: true,
+      reason: "accepted",
+      identitySource: "node_sequence",
+    },
+  );
+  assert.deepEqual(structuredResultGateway.filterWithResult({}), {
+    accepted: true,
+    reason: "accepted_without_identity",
+    identitySource: "none",
+  });
+  assert.deepEqual(structuredResultGateway.filterWithResult(null), {
+    accepted: true,
+    reason: "accepted_without_identity",
+    identitySource: "none",
+  });
+  assert.deepEqual(structuredResultGateway.getStats(), {
+    acceptedEvents: 4,
+    droppedDuplicates: 1,
+    currentCacheSize: 2,
+    activeWindowSeconds: 180,
+  });
+
   const manualFloorGateway = new DedupeGateway({
     slidingWindowSeconds: 210,
     maxSlidingWindowSeconds: 420,

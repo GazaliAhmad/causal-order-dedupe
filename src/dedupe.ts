@@ -7,6 +7,19 @@ export interface DedupeEvent {
   sequence?: bigint | number | string;
 }
 
+export type DedupeIdentitySource = "id" | "node_sequence" | "none";
+
+export type DedupeFilterReason =
+  | "accepted"
+  | "duplicate"
+  | "accepted_without_identity";
+
+export interface DedupeFilterResult {
+  accepted: boolean;
+  reason: DedupeFilterReason;
+  identitySource: DedupeIdentitySource;
+}
+
 export type DedupePreset =
   | "standard"
   | "heavy-duplicates"
@@ -161,19 +174,33 @@ export class DedupeGateway {
   }
 
   filter(event?: DedupeEvent | null): boolean {
+    return this.filterWithResult(event).accepted;
+  }
+
+  filterWithResult(event?: DedupeEvent | null): DedupeFilterResult {
     if (!event) {
       this.#acceptedEvents += 1;
-      return true;
+      return {
+        accepted: true,
+        reason: "accepted_without_identity",
+        identitySource: "none",
+      };
     }
 
     let identityKey = event.id;
+    let identitySource: DedupeIdentitySource = identityKey ? "id" : "none";
     if (!identityKey && event.nodeId && event.sequence !== undefined) {
       identityKey = `${event.nodeId}::${event.sequence}`;
+      identitySource = "node_sequence";
     }
 
     if (!identityKey) {
       this.#acceptedEvents += 1;
-      return true;
+      return {
+        accepted: true,
+        reason: "accepted_without_identity",
+        identitySource: "none",
+      };
     }
 
     const currentTime = BigInt(this.#nowProvider());
@@ -181,12 +208,20 @@ export class DedupeGateway {
 
     if (this.#cache.has(identityKey)) {
       this.#droppedDuplicates += 1;
-      return false;
+      return {
+        accepted: false,
+        reason: "duplicate",
+        identitySource,
+      };
     }
 
     this.#cache.set(identityKey, currentTime);
     this.#acceptedEvents += 1;
-    return true;
+    return {
+      accepted: true,
+      reason: "accepted",
+      identitySource,
+    };
   }
 
   cleanup(): void {

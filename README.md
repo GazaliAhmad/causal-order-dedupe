@@ -1,174 +1,315 @@
 # @causal-order/dedupe
 
-Deployable duplicate-filtering runtime for `causal-order` event streams.
+Suppress repeated event delivery before events enter `causal-order`.
+`@causal-order/dedupe` provides bounded, in-memory identity tracking for normal
+ingress, retry, reconnect, and monitor-managed replay paths.
 
-`@causal-order/dedupe` is a deployable duplicate-filtering runtime for replay, recovery, reconnect, and distributed event-ingestion flows that need bounded replay handling before events enter the `causal-order` pipeline.
+Published package version: `v1.2.0`
 
-## Current Release
+## Stack Position
 
-Version `1.1.1` is the current stable release line.
-
-It is a docs-and-positioning patch release. It refreshes the published package story to present `@causal-order/dedupe` as a deployable runtime, clarifies practical topology framing, and records the newer typical-profile deployment interpretation alongside the existing hostile-profile resilience evidence.
-
-Current `1.1.1` read: runtime behavior remains aligned with the released `1.1.0` package line. The tracked `n=12` hostile-profile runs still define the resilience boundary, while the later `typical-real-world-mesh` comparison strengthens the deployability conclusion for ordinary deployment-shaped use.
-
-## Practical Topology Framing
-
-For deployment-minded runtime evaluation in this repo, the current practical node-count framing is:
-
-- `n=3`: minimal production baseline
-- `n=5`: primary real-world baseline
-- `n=8`: growth baseline
-- `n=12`: resilience / expansion boundary
-
-In other words:
-
-- use `n=3` to confirm the package behaves cleanly in the smallest serious cluster shape
-- use `n=5` as the most representative everyday deployment target
-- use `n=8` to show there is still comfort margin when the cluster grows beyond the ordinary case
-- use `n=12` to prove headroom and reconnect resilience rather than to model the default expected deployment
-
-This is a practical deployment and testing model, not a hard limit or universal production rule.
-
-## Relationship to [causal-order](https://www.npmjs.com/package/causal-order)
-
-`@causal-order/dedupe` is an extension package for [`causal-order`](https://www.npmjs.com/package/causal-order).
-
-It provides deployable duplicate-event detection before events enter the causal ordering pipeline and is intended to sit immediately before the ordering stage in stream-processing, replay, recovery, and ingestion workflows built on top of the `causal-order` runtime.
-
-| Package                | Purpose                            |
-| ---------------------- | ---------------------------------- |
-| `causal-order`         | Core causal event ordering runtime |
-| `@causal-order/dedupe` | Duplicate-event filtering layer    |
-
-Runtime compatibility:
-
-* Node `20+`
-* ESM-only package
-
-## What It Does
-
-`DedupeGateway` keeps a sliding-window cache of event identities and lets you drop repeat deliveries before handing events to `causal-order`.
-
-By default, the gateway performs lightweight automatic cleanup during filtering so old identities can age out without extra wiring. You can still call `cleanup()` manually when you want tighter control over eviction timing.
-
-An event is deduplicated by:
-
-- `event.id`, when present
-- otherwise `event.nodeId + "::" + event.sequence`
-
-Events without either identity shape are allowed through unchanged.
-
-## Install
-
-```bash
-npm install @causal-order/dedupe
+```text
+@causal-order/transport -> @causal-order/monitor -> @causal-order/dedupe -> causal-order
 ```
 
-## Usage
+The monitor owns health-aware routing, bounded buffering, and controlled replay.
+This package owns duplicate filtering immediately before causal ordering.
+Buffered events re-enter the downstream path through dedupe during monitor
+recovery.
+
+The exception is monitor's deliberate `dedupe_bypass_throttled` route. Events on
+that degraded route go directly to causal ordering and are not filtered by this
+package.
+
+## Install and Requirements
+
+```bash
+npm install @causal-order/dedupe causal-order
+```
+
+- Node.js `>=22.13.0`
+- ESM-only output
+- root package import only; no public subpath imports
+
+| Package | Compatible line | Role |
+| --- | --- | --- |
+| `causal-order` | `^1.0.0` | Runtime dependency and downstream ordering |
+| `@causal-order/monitor` | `0.5.x` | Optional upstream buffering and replay |
+| `@causal-order/transport` | `^0.1.2` | Optional ingress transport |
+| `@causal-order/testing` | `0.3.x` | Optional stack-integration tooling |
+
+## When to Use It
+
+Use dedupe when a `causal-order` pipeline can receive the same logical event
+more than once because of:
+
+- transport retries or reconnects
+- monitor recovery and buffered replay
+- at-least-once delivery
+- overlapping ingestion paths
+- distributed producers repeating an event identity
+
+### When Not to Use It
+
+This package is not:
+
+- durable idempotency storage
+- an exactly-once delivery guarantee
+- a replacement for monitor buffering or causal ordering
+- a distributed cache shared across processes
+- a payload-equivalence detector for events without stable identities
+
+## Integration Model
+
+Create one `DedupeGateway` for the lifetime of the application process and pass
+accepted events to `causal-order`:
 
 ```js
 import { DedupeGateway } from "@causal-order/dedupe";
 
-const dedupe = new DedupeGateway({
-  slidingWindowSeconds: 180,
-  maxSlidingWindowSeconds: 300,
-  nowProvider: () => BigInt(Date.now()),
-});
+const dedupe = new DedupeGateway({ preset: "standard" });
 
-if (dedupe.filter(event)) {
-  // forward event into causal-order
+async function deliverToDedupe(event) {
+  const decision = dedupe.filterWithResult(event);
+
+  if (decision.accepted) {
+    await deliverToCausalOrder(event);
+  }
+
+  return decision;
 }
-
-const stats = dedupe.getStats();
-console.log(stats);
-
-// optional when you want tighter manual control
-dedupe.cleanup();
 ```
 
-## Operator Guide
+A duplicate decision is a successfully handled delivery: the event has already
+been represented downstream and should not remain pending merely because dedupe
+did not emit another causal-order input.
 
-Additional guides for deployment, configuration, troubleshooting, and runtime validation are available here:
+Use one filtering method per delivery. Calling both `filter()` and
+`filterWithResult()` for the same event performs two dedupe operations.
 
-- [Deployment Guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/deployment.md)
-- [Building Dedupe Configs](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/building-dedupe-configs.md)
-- [Operator Guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/operator-tuning.md)
-- [Building Workload Profiles](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/building-workload-profiles.md)
-- [Topology Validation Guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/topology-validation.md)
-- [Operator Error Guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/operator-errors.md)
+## Monitor Routing Contract
 
-Use the deployment guide for package integration, and use the operator, workload-profile, and topology guides when you want deeper guidance for runtime evaluation.
+| Monitor route | Dedupe behavior |
+| --- | --- |
+| `normal` | Filter before causal ordering |
+| `order_buffer_only` | Filter when buffered work replays |
+| `full_outage_buffer` | Filter when buffered work replays |
+| `replay_through_dedupe` | Accept unseen identities or successfully drop duplicates |
+| `dedupe_bypass_throttled` | Dedupe is bypassed; duplicates can reach causal ordering |
 
-## Project Docs
+Applications that cannot tolerate duplicate delivery must disable or avoid
+dedupe bypass and provide an application-owned reconciliation or durable
+idempotency boundary.
 
-- [Compatibility](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/COMPATIBILITY.md)
-- [Security Policy](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/SECURITY.md)
-- [Code of Conduct](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/CODE_OF_CONDUCT.md)
+## Identity Contract
+
+Identity precedence is:
+
+1. `event.id`, when it is a non-empty string
+2. `event.nodeId + "::" + event.sequence`, when both values are present
+3. no identity; the event is accepted without being cached
+
+The package compares identities, not payloads. Reusing an identity for different
+payloads causes later deliveries within the active window to be dropped.
+
+## Configuration
+
+Most deployments should start with a preset:
+
+```js
+const dedupe = new DedupeGateway({ preset: "standard" });
+```
+
+| Preset | Sliding window | Maximum window |
+| --- | ---: | ---: |
+| `standard` | 180 seconds | 300 seconds |
+| `heavy-duplicates` | 300 seconds | 600 seconds |
+| `high-latency` | 480 seconds | 900 seconds |
+| `cross-node-busy` | 240 seconds | 480 seconds |
+
+Manual configuration is available when production evidence justifies explicit
+bounds:
+
+```js
+const dedupe = new DedupeGateway({
+  slidingWindowSeconds: 420,
+  maxSlidingWindowSeconds: 840,
+  autoCleanup: true,
+  autoCleanupIntervalSeconds: 30,
+});
+```
+
+Constructor options:
+
+- `preset`: one of the four named presets; defaults to `standard`
+- `slidingWindowSeconds`: initial and minimum active window
+- `maxSlidingWindowSeconds`: ceiling for `updateWindow()`
+- `autoCleanup`: run periodic cleanup during filtering; defaults to `true`
+- `autoCleanupIntervalSeconds`: minimum interval between automatic cleanup
+  passes; defaults to `30`
+- `nowProvider`: optional millisecond clock for controlled runtime integration
+  or deterministic tests
+
+All configured durations must be positive finite numbers, and the sliding window
+must not exceed the maximum window.
+
+### JSON Configuration
+
+```json
+{
+  "preset": "standard",
+  "autoCleanup": true,
+  "autoCleanupIntervalSeconds": 30
+}
+```
+
+```js
+import { createDedupeGatewayFromConfigFile } from "@causal-order/dedupe";
+
+const dedupe = createDedupeGatewayFromConfigFile("./dedupe.json");
+```
+
+A JSON file must choose either `preset` or both manual window fields. Unknown
+fields and mixed preset/manual window configuration are rejected. Runtime-only
+options such as `nowProvider` can be supplied as overrides:
+
+```js
+const dedupe = createDedupeGatewayFromConfigFile("./dedupe.json", {
+  nowProvider: () => BigInt(Date.now()),
+});
+```
+
+## Window Sizing
+
+Size the active window against the maximum credible gap between deliveries of
+the same identity. In a monitor-enabled stack, that can include transport retry
+delay, downstream outage duration, recovery confirmation, replay queue time,
+retry backoff, and acknowledgement uncertainty.
+
+The dedupe window should normally be at least as large as the downstream
+causal-order late-arrival horizon. Monitor retention and dedupe retention do not
+need to be identical: widening dedupe retention increases process memory use and
+should be supported by observed redelivery behavior.
+
+Identity expiry is cleanup-driven. Automatic cleanup can retain an identity for
+up to one cleanup interval beyond the nominal window. That additional time is
+not a guaranteed extension of the configured contract.
 
 ## API
 
-### `new DedupeGateway(options)`
+### `new DedupeGateway(config?)`
 
-Creates a dedupe gateway. The `options` object is optional.
-
-Options:
-
-- `preset`: named mode such as `standard`, `heavy-duplicates`, `high-latency`, or `cross-node-busy`
-- `slidingWindowSeconds`: initial lookback window, default `180`
-- `maxSlidingWindowSeconds`: hard upper bound for dynamic window growth, default `300`
-- `autoCleanup`: whether lightweight automatic cleanup runs during filtering, default `true`
-- `autoCleanupIntervalSeconds`: minimum interval between automatic cleanup passes, default `30`
-- `nowProvider`: function that returns the current time in milliseconds, compatible with `BigInt`
-
-`slidingWindowSeconds` controls how long the dedupe layer remembers an accepted event identity before automatic or manual cleanup can evict it. If the same event arrives again while that identity is still cached, it is dropped as a duplicate. Once the identity ages out, the event can be accepted again.
-
-`maxSlidingWindowSeconds` is the ceiling used by `updateWindow(seconds)`. It does not widen the active dedupe window on its own, but it sets the maximum window the gateway is allowed to use later.
-
-If the downstream `causal-order` engine is operating with a `90s` late-arrival horizon, setting `slidingWindowSeconds` below `90` usually means some delayed duplicates can fall out of the dedupe cache before the engine itself is done considering that period. In practice, operators will usually want the dedupe window to be at least as large as the engine horizon, and often somewhat higher to absorb cleanup cadence, transport jitter, and delayed delivery spikes.
+Creates an in-memory gateway using a preset or explicit configuration.
 
 ### `filter(event)`
 
-Returns:
+Returns `true` when the event should continue downstream and `false` when its
+identity is already present in the active window.
 
-- `true` when the event should be accepted
-- `false` when the event is considered a duplicate
+### `filterWithResult(event)`
+
+Performs the same state transition as `filter()` and returns payload-free
+decision evidence:
+
+```ts
+{
+  accepted: boolean;
+  reason: "accepted" | "duplicate" | "accepted_without_identity";
+  identitySource: "id" | "node_sequence" | "none";
+}
+```
+
+The resolved identity and event payload are not exposed in the result.
 
 ### `updateWindow(seconds)`
 
-Adjusts the active dedupe window, capped by `maxSlidingWindowSeconds`.
+Changes the active window within the configured minimum and maximum bounds.
+Invalid values are ignored.
 
 ### `getStats()`
 
-Returns a lightweight runtime snapshot:
+Returns process-lifetime counters and current state:
 
-- `acceptedEvents`: total events accepted by this gateway instance
-- `droppedDuplicates`: total duplicate events rejected by this gateway instance
-- `currentCacheSize`: number of identities currently retained in the dedupe cache
-- `activeWindowSeconds`: current active dedupe window in seconds
-
-The counters are lifetime counts for the current gateway instance. The cache size and active window are current snapshot values.
-
-In practice, operators can read these values as:
-
-- rising `droppedDuplicates` means the gateway is actively catching repeated deliveries
-- rising `currentCacheSize` means the gateway is retaining more dedupe state
-- a changed `activeWindowSeconds` confirms the gateway is running with a different active window than before
+```ts
+{
+  acceptedEvents: number;
+  droppedDuplicates: number;
+  currentCacheSize: number;
+  activeWindowSeconds: number;
+}
+```
 
 ### `cleanup()`
 
-Evicts cached identities older than the current sliding window.
-
-This is optional for most drop-in use because automatic cleanup is enabled by default. Call it manually when you want stricter control over eviction timing or when `autoCleanup` is disabled.
+Evicts identities older than the active window. Manual cleanup is optional when
+automatic cleanup is enabled.
 
 ### `destroy()`
 
-Clears the in-memory cache and resets runtime stats for that gateway instance.
+Clears retained identities and resets gateway statistics. Call it when the
+gateway is permanently retired, not as ordinary traffic maintenance.
 
-## Version Notice
+### `loadDedupeGatewayConfigFile(path)`
 
-Published versions `1.0.1` through `1.0.5` are deprecated due to a config-adherence bug in runtime dedupe behavior. In those affected versions, the active dedupe window and cleanup behavior may not honor configured values correctly under runtime conditions.
+Reads and validates a JSON configuration file without creating a gateway.
 
-Version `1.0.0` was published and immediately deprecated because `LICENSE.md` was accidentally excluded from the npm package. Version `1.0.3` was never published to npm.
+### `createDedupeGatewayFromConfigFile(path, overrides?)`
 
-Version `1.0.6` fixes the config-adherence bug and adds `getStats()` for lightweight runtime insights on dedupe activity and state. The gateway also supports `updateWindow(seconds)` for runtime window adjustment and `destroy()` for clearing cache and resetting stats when needed.
+Reads a JSON configuration file and creates a gateway, applying optional
+runtime overrides afterward.
+
+## Operational Constraints
+
+- Identity state is held in process memory and is not restored after restart.
+- A fresh process can accept an identity that the previous process accepted.
+- Restart after an indeterminate downstream acknowledgement is therefore an
+  at-least-once boundary, not an exactly-once boundary.
+- Monitor's SQLite reservoir and dedupe's identity cache are separate ownership
+  domains; monitor storage must not be treated as dedupe state.
+- Cache memory grows with the number of distinct identities retained inside the
+  active window.
+- `getStats()` is local process evidence, not a whole-stack health verdict.
+
+## Package Exports
+
+The supported import is the package root:
+
+```js
+import {
+  DedupeGateway,
+  createDedupeGatewayFromConfigFile,
+  loadDedupeGatewayConfigFile,
+} from "@causal-order/dedupe";
+```
+
+Deep paths such as `@causal-order/dedupe/src/dedupe.js` and
+`@causal-order/dedupe/package.json` are not public exports. CommonJS `require()`
+is not supported.
+
+## Documentation
+
+- [Deployment guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/deployment.md)
+- [Configuration guide](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/building-dedupe-configs.md)
+- [Configuration errors](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/guides/operator-errors.md)
+- [Compatibility](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/COMPATIBILITY.md)
+- [Release history](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/CHANGELOG.md)
+
+## Release History Notes
+
+- `1.2.0` is the current monitor-aware release line. It adds structured dedupe
+  decisions, aligns the runtime floor with Node `>=22.13.0`, and defines normal,
+  replay, bypass, expiry, and restart behavior as stack contracts.
+- `1.1.1` was the preceding documentation-and-positioning patch and did not
+  change runtime behavior from `1.1.0`. Its topology and resilience evidence is
+  retained in the project changelog and roadmap.
+- Versions `1.0.1` through `1.0.5` are deprecated because runtime window and
+  cleanup behavior could fail to honor configuration correctly.
+- Version `1.0.0` was published and immediately deprecated because the license
+  file was excluded from the package.
+- Version `1.0.3` was never published.
+- Version `1.0.6` corrected the configuration-adherence defect and added
+  `getStats()`, `updateWindow()`, and `destroy()`.
+
+## License
+
+[MIT](https://github.com/GazaliAhmad/causal-order-dedupe/blob/main/LICENSE)
