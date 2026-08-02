@@ -1,6 +1,6 @@
 {
   "name": "@causal-order/dedupe",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Deployable duplicate-filtering runtime for causal-order event streams.",
   "keywords": [
     "causal-order",

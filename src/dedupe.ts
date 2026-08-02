@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 
 export interface DedupeEvent {
   id?: string | null;
@@ -18,6 +19,182 @@ export interface DedupeFilterResult {
   accepted: boolean;
   reason: DedupeFilterReason;
   identitySource: DedupeIdentitySource;
+}
+
+export interface DedupeIdentityLedgerStats {
+  storedIdentities: number;
+  maxIdentities: number;
+  databasePath: string;
+}
+
+export interface DedupeIdentityLedger {
+  claim(identityKey: string, acceptedAtMs: bigint): boolean;
+  getStats?(): DedupeIdentityLedgerStats;
+  close?(): void;
+}
+
+export interface SqliteIdentityLedgerConfig {
+  databasePath: string;
+  maxIdentities: number;
+}
+
+export class DedupeIdentityLedgerCapacityError extends Error {
+  readonly code = "ERR_DEDUPE_IDENTITY_LEDGER_CAPACITY";
+  readonly storedIdentities: number;
+  readonly maxIdentities: number;
+
+  constructor(storedIdentities: number, maxIdentities: number) {
+    super(
+      `Durable dedupe identity ledger capacity exhausted (${storedIdentities}/${maxIdentities}); refusing a new identity`,
+    );
+    this.name = "DedupeIdentityLedgerCapacityError";
+    this.storedIdentities = storedIdentities;
+    this.maxIdentities = maxIdentities;
+  }
+}
+
+export class SqliteIdentityLedger implements DedupeIdentityLedger {
+  readonly databasePath: string;
+  readonly maxIdentities: number;
+  #database: DatabaseSync;
+  #containsStatement: StatementSync;
+  #insertStatement: StatementSync;
+  #incrementCountStatement: StatementSync;
+  #countStatement: StatementSync;
+  #closed = false;
+
+  constructor(config: SqliteIdentityLedgerConfig) {
+    const databasePath = resolveDurableLedgerPath(config.databasePath);
+    const maxIdentities = resolvePositiveSafeInteger(
+      config.maxIdentities,
+      "maxDurableIdentities",
+    );
+    this.databasePath = databasePath;
+    this.maxIdentities = maxIdentities;
+    this.#database = new DatabaseSync(databasePath);
+    this.#database.exec("PRAGMA journal_mode = WAL");
+    this.#database.exec("PRAGMA synchronous = FULL");
+    this.#database.exec("PRAGMA busy_timeout = 5000");
+    this.#database.exec(`
+      CREATE TABLE IF NOT EXISTS dedupe_processed_identities (
+        identity_key TEXT PRIMARY KEY,
+        accepted_at_ms INTEGER NOT NULL
+      ) STRICT
+    `);
+    this.#database.exec(`
+      CREATE TABLE IF NOT EXISTS dedupe_identity_ledger_metadata (
+        singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+        identity_count INTEGER NOT NULL,
+        max_identities INTEGER NOT NULL
+      ) STRICT
+    `);
+    this.#database
+      .prepare(`
+        INSERT OR IGNORE INTO dedupe_identity_ledger_metadata (
+          singleton_id,
+          identity_count,
+          max_identities
+        ) VALUES (
+          1,
+          (SELECT COUNT(*) FROM dedupe_processed_identities),
+          ?
+        )
+      `)
+      .run(maxIdentities);
+    const metadata = this.#database
+      .prepare(`
+        SELECT max_identities
+        FROM dedupe_identity_ledger_metadata
+        WHERE singleton_id = 1
+      `)
+      .get() as { max_identities?: number | bigint } | undefined;
+    const recordedMaxIdentities = Number(metadata?.max_identities ?? 0);
+    if (recordedMaxIdentities !== maxIdentities) {
+      this.#database.close();
+      throw invalidDedupeConfigError(
+        `durable ledger was created with maxDurableIdentities=${recordedMaxIdentities}, not ${maxIdentities}`,
+      );
+    }
+    this.#containsStatement = this.#database.prepare(`
+      SELECT 1 AS present
+      FROM dedupe_processed_identities
+      WHERE identity_key = ?
+    `);
+    this.#insertStatement = this.#database.prepare(`
+      INSERT INTO dedupe_processed_identities (
+        identity_key,
+        accepted_at_ms
+      ) VALUES (?, ?)
+    `);
+    this.#incrementCountStatement = this.#database.prepare(`
+      UPDATE dedupe_identity_ledger_metadata
+      SET identity_count = identity_count + 1
+      WHERE singleton_id = 1
+    `);
+    this.#countStatement = this.#database.prepare(`
+      SELECT identity_count
+      FROM dedupe_identity_ledger_metadata
+      WHERE singleton_id = 1
+    `);
+  }
+
+  claim(identityKey: string, acceptedAtMs: bigint): boolean {
+    this.#requireOpen();
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      if (this.#containsStatement.get(identityKey)) {
+        this.#database.exec("COMMIT");
+        return false;
+      }
+      const storedIdentities = this.#readStoredIdentityCount();
+      if (storedIdentities >= this.maxIdentities) {
+        throw new DedupeIdentityLedgerCapacityError(
+          storedIdentities,
+          this.maxIdentities,
+        );
+      }
+      this.#insertStatement.run(identityKey, acceptedAtMs);
+      this.#incrementCountStatement.run();
+      this.#database.exec("COMMIT");
+      return true;
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  getStats(): DedupeIdentityLedgerStats {
+    this.#requireOpen();
+    const row = this.#countStatement.get() as
+      | { identity_count?: number | bigint }
+      | undefined;
+    return {
+      storedIdentities: Number(row?.identity_count ?? 0),
+      maxIdentities: this.maxIdentities,
+      databasePath: this.databasePath,
+    };
+  }
+
+  close(): void {
+    if (this.#closed) {
+      return;
+    }
+    this.#closed = true;
+    this.#database.close();
+  }
+
+  #requireOpen(): void {
+    if (this.#closed) {
+      throw new Error("Dedupe identity ledger is closed");
+    }
+  }
+
+  #readStoredIdentityCount(): number {
+    const row = this.#countStatement.get() as
+      | { identity_count?: number | bigint }
+      | undefined;
+    return Number(row?.identity_count ?? 0);
+  }
 }
 
 export type DedupePreset =
@@ -58,6 +235,9 @@ export interface DedupeGatewayConfig {
   autoCleanup?: boolean;
   autoCleanupIntervalSeconds?: number;
   nowProvider?: () => bigint | number;
+  identityLedger?: DedupeIdentityLedger;
+  durableIdentityLedgerPath?: string;
+  maxDurableIdentities?: number;
 }
 
 export interface DedupeGatewayFileConfig {
@@ -66,6 +246,8 @@ export interface DedupeGatewayFileConfig {
   slidingWindowSeconds?: number;
   autoCleanup?: boolean;
   autoCleanupIntervalSeconds?: number;
+  durableIdentityLedgerPath?: string;
+  maxDurableIdentities?: number;
 }
 
 export interface DedupeGatewayStats {
@@ -73,6 +255,7 @@ export interface DedupeGatewayStats {
   droppedDuplicates: number;
   currentCacheSize: number;
   activeWindowSeconds: number;
+  durableLedger?: DedupeIdentityLedgerStats;
 }
 
 interface ResolvedDedupeGatewayConfig {
@@ -81,6 +264,9 @@ interface ResolvedDedupeGatewayConfig {
   autoCleanup: boolean;
   autoCleanupIntervalSeconds: number;
   nowProvider: (() => bigint | number) | null;
+  identityLedger: DedupeIdentityLedger | null;
+  durableIdentityLedgerPath: string | null;
+  maxDurableIdentities: number | null;
 }
 
 export function loadDedupeGatewayConfigFile(
@@ -112,6 +298,9 @@ export class DedupeGateway {
   #autoCleanupEnabled: boolean;
   #autoCleanupIntervalMs: bigint;
   #lastCleanupAtMs: bigint | null;
+  #identityLedger: DedupeIdentityLedger | null;
+  #ownsIdentityLedger: boolean;
+  #destroyed = false;
 
   constructor(config: DedupeGatewayConfig = {}) {
     const resolved = resolveGatewayConfig(config);
@@ -132,6 +321,17 @@ export class DedupeGateway {
       Math.floor(resolved.autoCleanupIntervalSeconds * 1000),
     );
     this.#lastCleanupAtMs = null;
+    this.#identityLedger =
+      resolved.identityLedger ??
+      (resolved.durableIdentityLedgerPath
+        ? new SqliteIdentityLedger({
+            databasePath: resolved.durableIdentityLedgerPath,
+            maxIdentities: resolved.maxDurableIdentities as number,
+          })
+        : null);
+    this.#ownsIdentityLedger =
+      resolved.identityLedger === null &&
+      resolved.durableIdentityLedgerPath !== null;
   }
 
   get maxSlidingWindowMs(): bigint {
@@ -147,12 +347,19 @@ export class DedupeGateway {
   }
 
   getStats(): DedupeGatewayStats {
-    return {
+    const stats: DedupeGatewayStats = {
       acceptedEvents: this.#acceptedEvents,
       droppedDuplicates: this.#droppedDuplicates,
       currentCacheSize: this.#cache.size,
       activeWindowSeconds: Number(this.#currentWindowMs) / 1000,
     };
+    const durableLedger = this.#destroyed
+      ? undefined
+      : this.#identityLedger?.getStats?.();
+    if (durableLedger) {
+      stats.durableLedger = durableLedger;
+    }
+    return stats;
   }
 
   updateWindow(seconds: number): void {
@@ -178,6 +385,9 @@ export class DedupeGateway {
   }
 
   filterWithResult(event?: DedupeEvent | null): DedupeFilterResult {
+    if (this.#destroyed) {
+      throw new Error("Dedupe gateway is destroyed");
+    }
     if (!event) {
       this.#acceptedEvents += 1;
       return {
@@ -215,6 +425,18 @@ export class DedupeGateway {
       };
     }
 
+    if (
+      this.#identityLedger &&
+      !this.#identityLedger.claim(identityKey, currentTime)
+    ) {
+      this.#droppedDuplicates += 1;
+      return {
+        accepted: false,
+        reason: "duplicate",
+        identitySource,
+      };
+    }
+
     this.#cache.set(identityKey, currentTime);
     this.#acceptedEvents += 1;
     return {
@@ -233,6 +455,10 @@ export class DedupeGateway {
     this.#acceptedEvents = 0;
     this.#droppedDuplicates = 0;
     this.#lastCleanupAtMs = null;
+    this.#destroyed = true;
+    if (this.#ownsIdentityLedger) {
+      this.#identityLedger?.close?.();
+    }
   }
 
   #maybeAutoCleanup(currentTime: bigint): void {
@@ -284,6 +510,25 @@ function resolveGatewayConfig(
     );
   }
 
+  if (config.identityLedger && config.durableIdentityLedgerPath) {
+    throw invalidDedupeConfigError(
+      "choose either identityLedger or durableIdentityLedgerPath, not both",
+    );
+  }
+  const hasDurablePath = config.durableIdentityLedgerPath !== undefined;
+  const hasDurableCapacity = config.maxDurableIdentities !== undefined;
+  if (hasDurablePath !== hasDurableCapacity) {
+    throw invalidDedupeConfigError(
+      "durableIdentityLedgerPath and maxDurableIdentities must be configured together",
+    );
+  }
+  if (
+    config.identityLedger !== undefined &&
+    typeof config.identityLedger.claim !== "function"
+  ) {
+    throw invalidDedupeConfigError("identityLedger must implement claim()");
+  }
+
   return {
     maxSlidingWindowSeconds,
     slidingWindowSeconds,
@@ -294,6 +539,18 @@ function resolveGatewayConfig(
       label: "autoCleanupIntervalSeconds",
     }),
     nowProvider: config.nowProvider ?? null,
+    identityLedger: config.identityLedger ?? null,
+    durableIdentityLedgerPath:
+      config.durableIdentityLedgerPath === undefined
+        ? null
+        : resolveDurableLedgerPath(config.durableIdentityLedgerPath),
+    maxDurableIdentities:
+      config.maxDurableIdentities === undefined
+        ? null
+        : resolvePositiveSafeInteger(
+            config.maxDurableIdentities,
+            "maxDurableIdentities",
+          ),
   };
 }
 
@@ -364,6 +621,8 @@ function parseDedupeGatewayConfigFile(
     "maxSlidingWindowSeconds",
     "autoCleanup",
     "autoCleanupIntervalSeconds",
+    "durableIdentityLedgerPath",
+    "maxDurableIdentities",
   ]);
 
   for (const key of Object.keys(record)) {
@@ -431,6 +690,19 @@ function parseDedupeGatewayConfigFile(
     );
   }
 
+  if ("durableIdentityLedgerPath" in record) {
+    config.durableIdentityLedgerPath = parseFileLedgerPath(
+      record.durableIdentityLedgerPath,
+      resolvedPath,
+    );
+  }
+  if ("maxDurableIdentities" in record) {
+    config.maxDurableIdentities = parsePositiveSafeInteger(
+      record.maxDurableIdentities,
+      `Dedupe config file field "maxDurableIdentities" in ${resolvedPath}`,
+    );
+  }
+
   resolveGatewayConfig(config);
   return config;
 }
@@ -473,6 +745,49 @@ function parseBooleanValue(value: unknown, label: string): boolean {
   }
 
   return value;
+}
+
+function parsePositiveSafeInteger(value: unknown, label: string): number {
+  if (typeof value !== "number") {
+    throw new Error(`${label} must be a positive safe integer`);
+  }
+  return resolvePositiveSafeInteger(value, label);
+}
+
+function resolvePositiveSafeInteger(value: number, label: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a positive safe integer`);
+  }
+  return value;
+}
+
+function resolveDurableLedgerPath(value: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw invalidDedupeConfigError(
+      "durableIdentityLedgerPath must be a non-empty string",
+    );
+  }
+  if (value === ":memory:") {
+    throw invalidDedupeConfigError(
+      'durableIdentityLedgerPath cannot be ":memory:"',
+    );
+  }
+  return resolve(value);
+}
+
+function parseFileLedgerPath(value: unknown, configPath: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(
+      `Dedupe config file field "durableIdentityLedgerPath" in ${configPath} must be a non-empty string`,
+    );
+  }
+  if (value === ":memory:") {
+    throw invalidDedupeConfigFileError(
+      configPath,
+      'durableIdentityLedgerPath cannot be ":memory:"',
+    );
+  }
+  return isAbsolute(value) ? value : resolve(dirname(configPath), value);
 }
 
 function invalidDedupeConfigError(detail: string): Error {

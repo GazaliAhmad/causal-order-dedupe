@@ -1,10 +1,11 @@
 # @causal-order/dedupe
 
 Suppress repeated event delivery before events enter `causal-order`.
-`@causal-order/dedupe` provides bounded, in-memory identity tracking for normal
-ingress, retry, reconnect, and monitor-managed replay paths.
+`@causal-order/dedupe` provides bounded in-memory identity tracking by default,
+with an opt-in durable SQLite identity ledger for restart-safe or unbounded
+monitor-managed replay paths.
 
-Published package version: `v1.2.0`
+Release version: `v1.2.1`
 
 ## Stack Position
 
@@ -34,7 +35,7 @@ npm install @causal-order/dedupe causal-order
 | Package | Compatible line | Role |
 | --- | --- | --- |
 | `causal-order` | `^1.0.0` | Runtime dependency and downstream ordering |
-| `@causal-order/monitor` | `0.5.x` | Optional upstream buffering and replay |
+| `@causal-order/monitor` | `0.5.x` or `0.6.x` | Optional upstream buffering and replay |
 | `@causal-order/transport` | `^0.1.2` | Optional ingress transport |
 | `@causal-order/testing` | `0.3.x` | Optional stack-integration tooling |
 
@@ -53,7 +54,6 @@ more than once because of:
 
 This package is not:
 
-- durable idempotency storage
 - an exactly-once delivery guarantee
 - a replacement for monitor buffering or causal ordering
 - a distributed cache shared across processes
@@ -149,6 +149,12 @@ Constructor options:
   passes; defaults to `30`
 - `nowProvider`: optional millisecond clock for controlled runtime integration
   or deterministic tests
+- `durableIdentityLedgerPath`: optional SQLite file that retains accepted
+  identities without sliding-window expiry
+- `maxDurableIdentities`: required positive integer capacity when
+  `durableIdentityLedgerPath` is configured
+- `identityLedger`: optional caller-owned `DedupeIdentityLedger` implementation;
+  choose this or `durableIdentityLedgerPath`, not both
 
 All configured durations must be positive finite numbers, and the sliding window
 must not exceed the maximum window.
@@ -179,6 +185,34 @@ const dedupe = createDedupeGatewayFromConfigFile("./dedupe.json", {
 });
 ```
 
+### Durable identity ledger
+
+Use a durable ledger when a duplicate can return after the maximum credible
+in-memory window or after a process restart:
+
+```js
+const dedupe = new DedupeGateway({
+  preset: "standard",
+  durableIdentityLedgerPath: "./state/processed-identities.sqlite",
+  maxDurableIdentities: 5_000_000,
+});
+```
+
+The ledger uses an atomic SQLite primary-key claim. Gateway instances sharing
+the same database cannot both accept the same identity, and accepted identities
+remain suppressed after restart. Capacity is finite and explicit. At capacity,
+known duplicates remain suppressed while a new identity throws
+`DedupeIdentityLedgerCapacityError` with code
+`ERR_DEDUPE_IDENTITY_LEDGER_CAPACITY`. No identity is silently evicted. The
+application or monitor must convert that error into admission refusal or
+backpressure until an operator archives or replaces the ledger under a declared
+recovery policy.
+
+The claim is committed at the dedupe acceptance boundary. It is not an atomic
+transaction with downstream causal-order processing. Applications that require
+exactly-once effects across crashes still need a transaction or outbox spanning
+the identity claim and the application side effect.
+
 ## Window Sizing
 
 Size the active window against the maximum credible gap between deliveries of
@@ -199,7 +233,8 @@ not a guaranteed extension of the configured contract.
 
 ### `new DedupeGateway(config?)`
 
-Creates an in-memory gateway using a preset or explicit configuration.
+Creates a gateway using a preset or explicit configuration. Identity state is
+in-memory unless a durable ledger is configured.
 
 ### `filter(event)`
 
@@ -236,6 +271,11 @@ Returns process-lifetime counters and current state:
   droppedDuplicates: number;
   currentCacheSize: number;
   activeWindowSeconds: number;
+  durableLedger?: {
+    storedIdentities: number;
+    maxIdentities: number;
+    databasePath: string;
+  };
 }
 ```
 
@@ -246,8 +286,9 @@ automatic cleanup is enabled.
 
 ### `destroy()`
 
-Clears retained identities and resets gateway statistics. Call it when the
-gateway is permanently retired, not as ordinary traffic maintenance.
+Clears in-memory identities, resets gateway statistics, and closes a ledger the
+gateway created from `durableIdentityLedgerPath`. Durable rows remain on disk.
+A caller-provided `identityLedger` remains caller-owned and open.
 
 ### `loadDedupeGatewayConfigFile(path)`
 
@@ -260,8 +301,11 @@ runtime overrides afterward.
 
 ## Operational Constraints
 
-- Identity state is held in process memory and is not restored after restart.
-- A fresh process can accept an identity that the previous process accepted.
+- Without a durable ledger, identity state is held in process memory and is not
+  restored after restart; a fresh process can accept a prior identity.
+- With a durable ledger, identities survive restart and ignore sliding-window
+  expiry, but storage is limited by `maxDurableIdentities`. Capacity exhaustion
+  refuses new identities rather than weakening duplicate suppression.
 - Restart after an indeterminate downstream acknowledgement is therefore an
   at-least-once boundary, not an exactly-once boundary.
 - Monitor's SQLite reservoir and dedupe's identity cache are separate ownership
@@ -277,6 +321,7 @@ The supported import is the package root:
 ```js
 import {
   DedupeGateway,
+  SqliteIdentityLedger,
   createDedupeGatewayFromConfigFile,
   loadDedupeGatewayConfigFile,
 } from "@causal-order/dedupe";
@@ -296,8 +341,11 @@ is not supported.
 
 ## Release History Notes
 
-- `1.2.0` is the current monitor-aware release line. It adds structured dedupe
-  decisions, aligns the runtime floor with Node `>=22.13.0`, and defines normal,
+- `1.2.1` is the current release line. It adds an opt-in durable SQLite identity
+  ledger for duplicate suppression across restarts and gateway instances, with
+  explicit capacity limits and fail-closed behavior.
+- `1.2.0` introduced the monitor-aware release line. It added structured dedupe
+  decisions, aligned the runtime floor with Node `>=22.13.0`, and defined normal,
   replay, bypass, expiry, and restart behavior as stack contracts.
 - `1.1.1` was the preceding documentation-and-positioning patch and did not
   change runtime behavior from `1.1.0`. Its topology and resilience evidence is

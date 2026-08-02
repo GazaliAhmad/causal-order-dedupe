@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import {
   createDedupeGatewayFromConfigFile,
   DedupeGateway,
+  SqliteIdentityLedger,
   type DedupeGatewayConfig,
   type DedupePreset,
   loadDedupeGatewayConfigFile,
@@ -376,6 +377,142 @@ function run(): void {
     currentCacheSize: 2,
     activeWindowSeconds: 1,
   });
+
+  const durableLedgerPath = resolve(tempDir, "processed-identities.sqlite");
+  const durableGatewayA = new DedupeGateway({
+    slidingWindowSeconds: 1,
+    maxSlidingWindowSeconds: 1,
+    durableIdentityLedgerPath: durableLedgerPath,
+    maxDurableIdentities: 3,
+    nowProvider: () => 0n,
+  });
+  assert.equal(durableGatewayA.filter({ id: "durable-event" }), true);
+  assert.equal(
+    durableGatewayA.filter({ nodeId: "durable-node", sequence: 7n }),
+    true,
+  );
+  assert.deepEqual(durableGatewayA.getStats().durableLedger, {
+    storedIdentities: 2,
+    maxIdentities: 3,
+    databasePath: durableLedgerPath,
+  });
+
+  const durableGatewayB = new DedupeGateway({
+    slidingWindowSeconds: 1,
+    maxSlidingWindowSeconds: 1,
+    durableIdentityLedgerPath: durableLedgerPath,
+    maxDurableIdentities: 3,
+    nowProvider: () => 10_000_000n,
+  });
+  assert.equal(durableGatewayB.filter({ id: "durable-event" }), false);
+  assert.equal(
+    durableGatewayB.filter({ nodeId: "durable-node", sequence: 7n }),
+    false,
+  );
+  assert.equal(durableGatewayB.filter({ id: "second-process-event" }), true);
+  assert.deepEqual(durableGatewayB.getStats().durableLedger, {
+    storedIdentities: 3,
+    maxIdentities: 3,
+    databasePath: durableLedgerPath,
+  });
+  durableGatewayA.destroy();
+  durableGatewayB.destroy();
+
+  const durableGatewayAfterRestart = new DedupeGateway({
+    slidingWindowSeconds: 1,
+    maxSlidingWindowSeconds: 1,
+    durableIdentityLedgerPath: durableLedgerPath,
+    maxDurableIdentities: 3,
+    nowProvider: () => 99_000_000n,
+  });
+  assert.equal(
+    durableGatewayAfterRestart.filter({ id: "second-process-event" }),
+    false,
+  );
+  assert.equal(durableGatewayAfterRestart.getStats().droppedDuplicates, 1);
+  assert.equal(
+    durableGatewayAfterRestart.filter({ id: "durable-event" }),
+    false,
+  );
+  assert.throws(
+    () => durableGatewayAfterRestart.filter({ id: "capacity-refused" }),
+    (error: any) =>
+      error?.code === "ERR_DEDUPE_IDENTITY_LEDGER_CAPACITY" &&
+      error?.storedIdentities === 3 &&
+      error?.maxIdentities === 3,
+  );
+  durableGatewayAfterRestart.destroy();
+  assert.throws(
+    () => durableGatewayAfterRestart.filter({ id: "after-destroy" }),
+    /Dedupe gateway is destroyed/,
+  );
+
+  const injectedLedgerPath = resolve(tempDir, "injected-ledger.sqlite");
+  const injectedLedger = new SqliteIdentityLedger({
+    databasePath: injectedLedgerPath,
+    maxIdentities: 10,
+  });
+  const injectedLedgerGateway = new DedupeGateway({
+    identityLedger: injectedLedger,
+  });
+  assert.equal(injectedLedgerGateway.filter({ id: "owned-by-caller" }), true);
+  injectedLedgerGateway.destroy();
+  assert.equal(injectedLedger.claim("still-open", 1n), true);
+  injectedLedger.close();
+
+  const durableConfigPath = resolve(tempDir, "dedupe-durable.json");
+  writeFileSync(
+    durableConfigPath,
+    `${JSON.stringify(
+      {
+        preset: "standard",
+        durableIdentityLedgerPath: "config-ledger.sqlite",
+        maxDurableIdentities: 10,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  assert.deepEqual(loadDedupeGatewayConfigFile(durableConfigPath), {
+    preset: "standard",
+    durableIdentityLedgerPath: resolve(tempDir, "config-ledger.sqlite"),
+    maxDurableIdentities: 10,
+  });
+  const durableConfigGateway =
+    createDedupeGatewayFromConfigFile(durableConfigPath);
+  assert.equal(durableConfigGateway.filter({ id: "config-event" }), true);
+  durableConfigGateway.destroy();
+
+  assert.throws(
+    () =>
+      new DedupeGateway({
+        durableIdentityLedgerPath: ":memory:",
+        maxDurableIdentities: 10,
+      }),
+    /durableIdentityLedgerPath cannot be ":memory:"/,
+  );
+  assert.throws(
+    () =>
+      new DedupeGateway({
+        identityLedger: injectedLedger,
+        durableIdentityLedgerPath: durableLedgerPath,
+        maxDurableIdentities: 3,
+      }),
+    /choose either identityLedger or durableIdentityLedgerPath, not both/,
+  );
+  assert.throws(
+    () => new DedupeGateway({ durableIdentityLedgerPath: durableLedgerPath }),
+    /durableIdentityLedgerPath and maxDurableIdentities must be configured together/,
+  );
+  assert.throws(
+    () =>
+      new DedupeGateway({
+        durableIdentityLedgerPath: durableLedgerPath,
+        maxDurableIdentities: 4,
+      }),
+    /durable ledger was created with maxDurableIdentities=3, not 4/,
+  );
   nowMs = 5_500;
   assert.equal(intervalFileGateway.filter({ id: "event-c" }), true);
   assert.deepEqual(intervalFileGateway.getStats(), {
@@ -440,6 +577,7 @@ function run(): void {
   );
 
   console.log("preset and config-file contract checks passed");
+  rmSync(tempDir, { recursive: true, force: true });
 }
 
 run();
