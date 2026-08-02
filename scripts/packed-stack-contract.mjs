@@ -44,11 +44,47 @@ function runNpm(args, cwd, capture = false) {
 }
 
 function parsePackFilename(output) {
-  const firstBracket = output.indexOf("[");
-  assert.notEqual(firstBracket, -1, "npm pack --json should emit a JSON array");
-  const rows = JSON.parse(output.slice(firstBracket));
+  const rowsValue = extractFirstJsonValue(output);
+  const rows = Array.isArray(rowsValue) ? rowsValue : Object.values(rowsValue);
   assert.equal(rows.length, 1, "npm pack should create one artifact");
   return rows[0].filename;
+}
+
+function extractFirstJsonValue(output) {
+  const start = [...output]
+    .map((character, index) => ({ character, index }))
+    .find(({ character }) => character === "[" || character === "{")?.index;
+  assert.notEqual(start, undefined, "npm pack --json should emit JSON");
+
+  const opening = output[start];
+  const closing = opening === "[" ? "]" : "}";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < output.length; index += 1) {
+    const character = output[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+    } else if (character === opening) {
+      depth += 1;
+    } else if (character === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        return JSON.parse(output.slice(start, index + 1));
+      }
+    }
+  }
+  throw new Error("npm pack --json emitted incomplete JSON");
 }
 
 function isWithin(parent, candidate) {
@@ -86,9 +122,9 @@ try {
         type: "module",
         dependencies: {
           "@causal-order/dedupe": `file:${dedupeTarball}`,
-          "@causal-order/monitor": "0.5.0",
+          "@causal-order/monitor": "0.6.0",
           "@causal-order/testing": `file:${testingTarball}`,
-          "@causal-order/transport": "0.1.2",
+          "@causal-order/transport": "0.2.0",
           "causal-order": "1.0.0",
         },
       },

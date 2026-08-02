@@ -16,7 +16,16 @@ The goal is to make `@causal-order/dedupe` easy to deploy without forcing operat
 
 ## Current Status
 
-- Version `1.2.0` is complete and is the current npm release line:
+- Version `1.2.1` is complete on the release branch and is the current release
+  candidate. After merge to `main`, publishing a tagged GitHub Release will
+  trigger npm publication:
+  - opt-in `SqliteIdentityLedger` provides restart-persistent duplicate memory
+    and atomic identity claims across gateway instances sharing one database
+  - durable configuration requires an explicit `maxDurableIdentities` capacity
+  - capacity exhaustion fails closed without silently evicting identities
+  - durable claims do not make downstream delivery transactionally exactly once
+- Version `1.2.0` remains complete and published as the preceding npm release
+  line:
   - runtime support is aligned to Node `>=22.13.0` with Node 22 and Node 24 CI lanes
   - `filterWithResult()` adds structured, payload-free decision evidence while preserving `filter()`
   - monitor normal, replay, bypass, and in-memory restart semantics are explicit

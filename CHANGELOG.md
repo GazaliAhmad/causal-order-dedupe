@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1]
+
+### Added
+
+- Added opt-in `SqliteIdentityLedger` support with atomic identity claims that
+  survive process restarts and coordinate duplicate suppression across gateway
+  instances sharing one database.
+- Added `durableIdentityLedgerPath` to constructor and JSON configuration,
+  required `maxDurableIdentities` capacity, relative-path resolution for config
+  files, and durable-ledger statistics.
+- Added contract coverage for concurrent gateway claims, restart persistence,
+  caller-owned ledger lifecycle, JSON configuration, and unsafe configuration
+  rejection.
+
+### Changed
+
+- Clarified that durable identity claims provide restart-persistent duplicate
+  memory but do not make downstream delivery transactionally exactly once.
+- Made durable storage fail closed at its configured identity capacity: known
+  duplicates remain suppressed and new identities raise a typed capacity error
+  without silent eviction.
+
 ## [1.2.0]
 
 ### Added
